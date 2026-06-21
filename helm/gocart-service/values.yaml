@@ -1,0 +1,99 @@
+# Default values for gocart-service.
+# This chart is reusable for product-service and order-service.
+
+serviceName: product-service
+
+replicaCount: 2
+
+image:
+  repository: ""
+  tag: "latest"
+  pullPolicy: IfNotPresent
+
+container:
+  port: 8081
+
+podAnnotations: {}
+
+serviceAccount:
+  create: true
+  name: ""
+  annotations: {}
+  # Example for IRSA:
+  # annotations:
+  #   eks.amazonaws.com/role-arn: arn:aws:iam::<account-id>:role/gocartops-dev-order-service-irsa
+
+service:
+  type: ClusterIP
+  port: 8081
+  targetPort: 8081
+
+ingress:
+  enabled: false
+  className: alb
+  annotations: {}
+  # Example ALB annotations:
+  # annotations:
+  #   alb.ingress.kubernetes.io/scheme: internet-facing
+  #   alb.ingress.kubernetes.io/target-type: ip
+  #   alb.ingress.kubernetes.io/listen-ports: '[{"HTTP":80}]'
+  host: ""
+  path: /
+  pathType: Prefix
+
+configMap:
+  enabled: true
+  data:
+    APP_ENV: dev
+    PORT: "8081"
+
+secret:
+  enabled: false
+  data: {}
+  # Example:
+  # data:
+  #   DB_USERNAME: postgres
+  #   DB_PASSWORD: change-me
+
+env: []
+# Example:
+# env:
+#   - name: PRODUCT_SERVICE_URL
+#     value: http://product-service:8081
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 128Mi
+  limits:
+    cpu: 500m
+    memory: 512Mi
+
+livenessProbe:
+  enabled: true
+  path: /healthz
+  initialDelaySeconds: 20
+  periodSeconds: 10
+  timeoutSeconds: 3
+  failureThreshold: 3
+
+readinessProbe:
+  enabled: true
+  path: /readyz
+  initialDelaySeconds: 10
+  periodSeconds: 10
+  timeoutSeconds: 3
+  failureThreshold: 3
+
+autoscaling:
+  enabled: true
+  minReplicas: 1
+  maxReplicas: 3
+  targetCPUUtilizationPercentage: 70
+  targetMemoryUtilizationPercentage: 80
+
+nodeSelector: {}
+
+tolerations: []
+
+affinity: {}

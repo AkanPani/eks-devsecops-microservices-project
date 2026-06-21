@@ -1,0 +1,30 @@
+---
+- name: Deploy one GoCartOps service using Helm
+  hosts: localhost
+  connection: local
+  gather_facts: false
+
+  vars_files:
+    - "../group_vars/{{ env | default('dev') }}/vars.yml"
+    - "../group_vars/{{ env | default('dev') }}/vault.yml"
+
+  vars:
+    service_name: "{{ lookup('env', 'SERVICE_NAME') | default('product-service', true) }}"
+
+  tasks:
+    - name: Validate service name
+      ansible.builtin.assert:
+        that:
+          - service_name in ['product-service', 'order-service']
+        fail_msg: "SERVICE_NAME must be product-service or order-service"
+
+    - name: Deploy selected service
+      kubernetes.core.helm:
+        name: "{{ service_name }}"
+        chart_ref: "../../helm/gocart-service"
+        release_namespace: "{{ app_namespace }}"
+        create_namespace: true
+        values_files:
+          - "../../helm-values/{{ env | default('dev') }}/{{ service_name }}-values.yaml"
+        wait: true
+        timeout: 10m

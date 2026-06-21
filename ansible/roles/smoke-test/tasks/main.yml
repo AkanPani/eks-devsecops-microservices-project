@@ -1,0 +1,67 @@
+---
+- name: Wait for AWS Load Balancer Controller deployment
+  ansible.builtin.command: >
+    kubectl rollout status deployment/{{ alb_controller_release_name }}
+    -n {{ alb_controller_namespace }}
+    --timeout={{ wait_timeout_seconds }}s
+  changed_when: false
+  when: alb_controller_enabled | bool
+
+- name: Wait for Metrics Server deployment
+  ansible.builtin.command: >
+    kubectl rollout status deployment/{{ metrics_server_release_name }}
+    -n {{ metrics_server_namespace }}
+    --timeout={{ wait_timeout_seconds }}s
+  changed_when: false
+  when: metrics_server_enabled | bool
+
+- name: Wait for kube-prometheus-stack Grafana deployment
+  ansible.builtin.command: >
+    kubectl rollout status deployment/{{ monitoring_release_name }}-grafana
+    -n {{ monitoring_namespace }}
+    --timeout={{ wait_timeout_seconds }}s
+  changed_when: false
+  failed_when: false
+  register: grafana_rollout
+  when: monitoring_enabled | bool
+
+- name: Show cluster nodes
+  ansible.builtin.command: kubectl get nodes -o wide
+  changed_when: false
+  register: nodes
+
+- name: Print nodes
+  ansible.builtin.debug:
+    var: nodes.stdout_lines
+
+- name: Show app namespace resources
+  ansible.builtin.command: kubectl get all,quota,limitrange,role,rolebinding,sa -n {{ app_namespace }}
+  changed_when: false
+  register: app_resources
+
+- name: Print app namespace resources
+  ansible.builtin.debug:
+    var: app_resources.stdout_lines
+
+- name: Show monitoring pods
+  ansible.builtin.command: kubectl get pods -n {{ monitoring_namespace }}
+  changed_when: false
+  register: monitoring_pods
+  when: monitoring_enabled | bool
+
+- name: Print monitoring pods
+  ansible.builtin.debug:
+    var: monitoring_pods.stdout_lines
+  when: monitoring_enabled | bool
+
+- name: Test metrics API
+  ansible.builtin.command: kubectl top nodes
+  changed_when: false
+  failed_when: false
+  register: top_nodes
+  when: metrics_server_enabled | bool
+
+- name: Print metrics API result
+  ansible.builtin.debug:
+    var: top_nodes.stdout_lines
+  when: metrics_server_enabled | bool

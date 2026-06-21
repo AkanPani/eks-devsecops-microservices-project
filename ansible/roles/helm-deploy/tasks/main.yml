@@ -1,0 +1,106 @@
+---
+#- name: Install or upgrade AWS Load Balancer Controller
+#  when: alb_controller_enabled | bool
+#  kubernetes.core.helm:
+#    name: "{{ alb_controller_release_name }}"
+#    chart_ref: "{{ alb_controller_chart_ref }}"
+#    chart_repo_url: "{{ alb_controller_chart_repo }}"
+#    release_namespace: "{{ alb_controller_namespace }}"
+#    create_namespace: false
+#    chart_version: "{{ alb_controller_chart_version | default(omit, true) }}"
+#    values:
+#      clusterName: "{{ eks_cluster_name }}"
+#      region: "{{ aws_region }}"
+#      vpcId: "{{ eks_vpc_id }}"
+#      serviceAccount:
+#        create: true
+#        name: "{{ alb_controller_service_account_name }}"
+#        annotations:
+#          eks.amazonaws.com/role-arn: "{{ alb_controller_iam_role_arn }}"
+#    wait: true
+#    timeout: 10m
+- name: Install or upgrade AWS Load Balancer Controller
+  when: alb_controller_enabled | bool
+  kubernetes.core.helm:
+    name: "{{ alb_controller_release_name }}"
+    chart_ref: "{{ alb_controller_chart_ref }}"
+    chart_repo_url: "{{ alb_controller_chart_repo }}"
+    release_namespace: "{{ alb_controller_namespace }}"
+    create_namespace: false
+    chart_version: "{{ alb_controller_chart_version | default(omit, true) }}"
+    values:
+      clusterName: "{{ eks_cluster_name }}"
+      region: "{{ aws_region }}"
+      vpcId: "{{ eks_vpc_id }}"
+      replicaCount: 1
+      resources:
+        requests:
+          cpu: 50m
+          memory: 64Mi
+        limits:
+          cpu: 200m
+          memory: 256Mi
+      serviceAccount:
+        create: true
+        name: "{{ alb_controller_service_account_name }}"
+        annotations:
+          eks.amazonaws.com/role-arn: "{{ alb_controller_iam_role_arn }}"
+    wait: true
+    timeout: 20m
+
+- name: Install or upgrade Metrics Server
+  when: metrics_server_enabled | bool
+  kubernetes.core.helm:
+    name: "{{ metrics_server_release_name }}"
+    chart_ref: "{{ metrics_server_chart_ref }}"
+    chart_repo_url: "{{ metrics_server_chart_repo }}"
+    release_namespace: "{{ metrics_server_namespace }}"
+    create_namespace: false
+    chart_version: "{{ metrics_server_chart_version }}"
+    values:
+      replicas: 1
+      args:
+        - --kubelet-preferred-address-types=InternalIP,ExternalIP,Hostname
+        - --kubelet-use-node-status-port
+        - --metric-resolution=15s
+    wait: true
+    timeout: 10m
+
+- name: Install or upgrade Prometheus and Grafana stack
+  when: monitoring_enabled | bool
+  kubernetes.core.helm:
+    name: "{{ monitoring_release_name }}"
+    chart_ref: "{{ prometheus_chart_ref }}"
+    chart_repo_url: "{{ prometheus_chart_repo }}"
+    release_namespace: "{{ monitoring_namespace }}"
+    create_namespace: false
+    chart_version: "{{ prometheus_chart_version }}"
+    values:
+      grafana:
+        enabled: true
+        adminUser: "{{ grafana_admin_user }}"
+        adminPassword: "{{ grafana_admin_password }}"
+        service:
+          type: "{{ grafana_service_type }}"
+        persistence:
+          enabled: false
+      prometheus:
+        prometheusSpec:
+          retention: 7d
+          scrapeInterval: 30s
+          evaluationInterval: 30s
+          resources:
+            requests:
+              cpu: 100m
+              memory: 512Mi
+            limits:
+              cpu: 500m
+              memory: 1Gi
+      alertmanager:
+        enabled: true
+      kubeStateMetrics:
+        enabled: true
+      nodeExporter:
+        enabled: true
+    wait: true
+    timeout: 15m

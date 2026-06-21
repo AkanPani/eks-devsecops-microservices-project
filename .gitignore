@@ -1,0 +1,14 @@
+# Terraform
+*.tfstate
+*.tfstate.*
+.terraform/
+.terraform.lock.hcl
+
+# IntelliJ
+.idea/
+*.iml
+
+# Secrets
+.env
+*.pem
+*.key

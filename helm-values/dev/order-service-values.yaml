@@ -1,0 +1,41 @@
+serviceName: order-service
+
+replicaCount: 2
+
+image:
+  repository: "<account-id>.dkr.ecr.ap-south-1.amazonaws.com/order-service"
+  tag: "latest"
+  pullPolicy: IfNotPresent
+
+container:
+  port: 8082
+
+service:
+  type: ClusterIP
+  port: 8082
+  targetPort: 8082
+
+configMap:
+  enabled: true
+  data:
+    APP_ENV: dev
+    PORT: "8082"
+    PRODUCT_SERVICE_URL: "http://product-service:8081"
+    AWS_REGION: "ap-south-1"
+    SQS_QUEUE_URL: "<terraform-output-sqs-queue-url>"
+
+serviceAccount:
+  create: true
+  name: order-service-sa
+  annotations:
+    eks.amazonaws.com/role-arn: "arn:aws:iam::<account-id>:role/gocartops-dev-order-service-irsa"
+
+ingress:
+  enabled: false
+
+autoscaling:
+  enabled: true
+  minReplicas: 1
+  maxReplicas: 3
+  targetCPUUtilizationPercentage: 70
+  targetMemoryUtilizationPercentage: 80

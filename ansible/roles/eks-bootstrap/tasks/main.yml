@@ -1,0 +1,147 @@
+---
+- name: Check AWS CLI
+  ansible.builtin.command: aws --version
+  changed_when: false
+
+- name: Check kubectl
+  ansible.builtin.command: kubectl version --client=true
+  changed_when: false
+
+- name: Check Helm
+  ansible.builtin.command: helm version --short
+  changed_when: false
+
+- name: Update kubeconfig for EKS cluster
+  ansible.builtin.command: >
+    aws eks update-kubeconfig
+    --region {{ aws_region }}
+    --name {{ eks_cluster_name }}
+  changed_when: "'Updated context' in update_kubeconfig.stdout or 'Added new context' in update_kubeconfig.stdout"
+  register: update_kubeconfig
+
+- name: Get AWS account ID
+  ansible.builtin.command: aws sts get-caller-identity --query Account --output text
+  changed_when: false
+  register: aws_account_id_result
+
+- name: Store AWS account ID
+  ansible.builtin.set_fact:
+    aws_account_id: "{{ aws_account_id_result.stdout | trim }}"
+
+- name: Describe EKS cluster
+  ansible.builtin.command: >
+    aws eks describe-cluster
+    --name {{ eks_cluster_name }}
+    --region {{ aws_region }}
+    --output json
+  changed_when: false
+  register: eks_cluster_result
+
+- name: Store EKS cluster facts
+  ansible.builtin.set_fact:
+    eks_cluster_json: "{{ eks_cluster_result.stdout | from_json }}"
+    eks_vpc_id: "{{ (eks_cluster_result.stdout | from_json).cluster.resourcesVpcConfig.vpcId }}"
+    eks_oidc_issuer: "{{ (eks_cluster_result.stdout | from_json).cluster.identity.oidc.issuer }}"
+
+- name: Store OIDC provider facts
+  ansible.builtin.set_fact:
+    eks_oidc_provider_path: "{{ eks_oidc_issuer | regex_replace('^https://', '') }}"
+    eks_oidc_provider_arn: "arn:aws:iam::{{ aws_account_id }}:oidc-provider/{{ eks_oidc_issuer | regex_replace('^https://', '') }}"
+
+- name: Show cluster bootstrap facts
+  ansible.builtin.debug:
+    msg:
+      - "Cluster: {{ eks_cluster_name }}"
+      - "Region: {{ aws_region }}"
+      - "VPC ID: {{ eks_vpc_id }}"
+      - "OIDC issuer: {{ eks_oidc_issuer }}"
+      - "OIDC provider ARN: {{ eks_oidc_provider_arn }}"
+
+- name: Ensure AWS Load Balancer Controller IAM policy exists
+  when: alb_controller_enabled | bool
+  block:
+    - name: Check existing ALB Controller IAM policy
+      ansible.builtin.command: >
+        aws iam get-policy
+        --policy-arn arn:aws:iam::{{ aws_account_id }}:policy/{{ alb_controller_iam_policy_name }}
+      changed_when: false
+      failed_when: false
+      register: alb_policy_check
+
+    - name: Download official ALB Controller IAM policy
+      ansible.builtin.get_url:
+        url: "{{ alb_controller_policy_url }}"
+        dest: "/tmp/{{ alb_controller_iam_policy_name }}.json"
+        mode: "0644"
+      when: alb_policy_check.rc != 0
+
+    - name: Create ALB Controller IAM policy
+      ansible.builtin.command: >
+        aws iam create-policy
+        --policy-name {{ alb_controller_iam_policy_name }}
+        --policy-document file:///tmp/{{ alb_controller_iam_policy_name }}.json
+      when: alb_policy_check.rc != 0
+
+    - name: Set ALB Controller IAM policy ARN
+      ansible.builtin.set_fact:
+        alb_controller_iam_policy_arn: "arn:aws:iam::{{ aws_account_id }}:policy/{{ alb_controller_iam_policy_name }}"
+
+- name: Ensure AWS Load Balancer Controller IRSA role exists
+  when: alb_controller_enabled | bool
+  block:
+    - name: Write ALB Controller trust policy
+      ansible.builtin.copy:
+        dest: "/tmp/{{ alb_controller_iam_role_name }}-trust-policy.json"
+        mode: "0644"
+        content: |
+          {
+            "Version": "2012-10-17",
+            "Statement": [
+              {
+                "Effect": "Allow",
+                "Principal": {
+                  "Federated": "{{ eks_oidc_provider_arn }}"
+                },
+                "Action": "sts:AssumeRoleWithWebIdentity",
+                "Condition": {
+                  "StringEquals": {
+                    "{{ eks_oidc_provider_path }}:aud": "sts.amazonaws.com",
+                    "{{ eks_oidc_provider_path }}:sub": "system:serviceaccount:{{ alb_controller_namespace }}:{{ alb_controller_service_account_name }}"
+                  }
+                }
+              }
+            ]
+          }
+
+    - name: Check existing ALB Controller IAM role
+      ansible.builtin.command: >
+        aws iam get-role
+        --role-name {{ alb_controller_iam_role_name }}
+      changed_when: false
+      failed_when: false
+      register: alb_role_check
+
+    - name: Create ALB Controller IAM role
+      ansible.builtin.command: >
+        aws iam create-role
+        --role-name {{ alb_controller_iam_role_name }}
+        --assume-role-policy-document file:///tmp/{{ alb_controller_iam_role_name }}-trust-policy.json
+      when: alb_role_check.rc != 0
+
+    - name: Update ALB Controller IAM role trust policy
+      ansible.builtin.command: >
+        aws iam update-assume-role-policy
+        --role-name {{ alb_controller_iam_role_name }}
+        --policy-document file:///tmp/{{ alb_controller_iam_role_name }}-trust-policy.json
+      changed_when: false
+
+    - name: Attach ALB Controller IAM policy to role
+      ansible.builtin.command: >
+        aws iam attach-role-policy
+        --role-name {{ alb_controller_iam_role_name }}
+        --policy-arn {{ alb_controller_iam_policy_arn }}
+      changed_when: false
+
+    - name: Set ALB Controller IAM role ARN
+      ansible.builtin.set_fact:
+        alb_controller_iam_role_arn: "arn:aws:iam::{{ aws_account_id }}:role/{{ alb_controller_iam_role_name }}"

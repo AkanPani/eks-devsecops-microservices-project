@@ -1,0 +1,39 @@
+---
+- name: Day-2 operations for GoCartOps EKS
+  hosts: localhost
+  connection: local
+  gather_facts: false
+
+  vars_files:
+    - "../group_vars/{{ env | default('dev') }}/vars.yml"
+    - "../group_vars/{{ env | default('dev') }}/vault.yml"
+
+  tasks:
+    - name: Show nodes
+      ansible.builtin.command: kubectl get nodes -o wide
+      changed_when: false
+      register: nodes_output
+
+    - name: Print nodes
+      ansible.builtin.debug:
+        var: nodes_output.stdout_lines
+
+    - name: Show app pods
+      ansible.builtin.command: kubectl get pods -n {{ app_namespace }} -o wide
+      changed_when: false
+      register: app_pods_output
+      failed_when: false
+
+    - name: Print app pods
+      ansible.builtin.debug:
+        var: app_pods_output.stdout_lines
+
+    - name: Show monitoring pods
+      ansible.builtin.command: kubectl get pods -n {{ monitoring_namespace }} -o wide
+      changed_when: false
+      register: monitoring_pods_output
+      failed_when: false
+
+    - name: Print monitoring pods
+      ansible.builtin.debug:
+        var: monitoring_pods_output.stdout_lines

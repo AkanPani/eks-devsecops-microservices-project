@@ -1,0 +1,12 @@
+---
+- name: Configure Jenkins EC2 server
+  hosts: role_jenkins
+  gather_facts: true
+  become: true
+
+  vars_files:
+    - "../group_vars/{{ env | default('dev') }}/vars.yml"
+    - "../group_vars/{{ env | default('dev') }}/vault.yml"
+
+  roles:
+    - role: ec2-config

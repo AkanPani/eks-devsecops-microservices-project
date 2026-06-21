@@ -1,0 +1,4 @@
+---
+# For real use, encrypt this file:
+# ansible-vault encrypt ansible/group_vars/dev/vault.yml
+grafana_admin_password: "ChangeMeDev@123"

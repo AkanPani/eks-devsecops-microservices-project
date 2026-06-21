@@ -1,0 +1,12 @@
+---
+- name: Smoke test GoCartOps cluster and services
+  hosts: localhost
+  connection: local
+  gather_facts: false
+
+  vars_files:
+    - "../group_vars/{{ env | default('dev') }}/vars.yml"
+    - "../group_vars/{{ env | default('dev') }}/vault.yml"
+
+  roles:
+    - role: smoke-test

@@ -1,0 +1,16 @@
+---
+- name: Rollback GoCartOps service using Helm
+  hosts: localhost
+  connection: local
+  gather_facts: false
+
+  vars_files:
+    - "../group_vars/{{ env | default('dev') }}/vars.yml"
+    - "../group_vars/{{ env | default('dev') }}/vault.yml"
+
+  vars:
+    service_name: "{{ lookup('env', 'SERVICE_NAME') | default('product-service', true) }}"
+    rollback_revision: "{{ lookup('env', 'ROLLBACK_REVISION') | default('', true) }}"
+
+  roles:
+    - role: rollback

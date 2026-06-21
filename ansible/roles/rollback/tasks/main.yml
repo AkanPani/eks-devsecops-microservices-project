@@ -1,0 +1,34 @@
+---
+- name: Validate service name
+  ansible.builtin.assert:
+    that:
+      - service_name in ['product-service', 'order-service']
+    fail_msg: "SERVICE_NAME must be product-service or order-service"
+
+- name: Show Helm history
+  ansible.builtin.command: helm history {{ service_name }} -n {{ app_namespace }}
+  changed_when: false
+  register: helm_history
+
+- name: Print Helm history
+  ansible.builtin.debug:
+    var: helm_history.stdout_lines
+
+- name: Rollback service to specific revision
+  ansible.builtin.command: >
+    helm rollback {{ service_name }} {{ rollback_revision }}
+    -n {{ app_namespace }}
+  when: rollback_revision | length > 0
+
+- name: Rollback service to previous revision
+  ansible.builtin.command: >
+    helm rollback {{ service_name }}
+    -n {{ app_namespace }}
+  when: rollback_revision | length == 0
+
+- name: Wait for service rollout after rollback
+  ansible.builtin.command: >
+    kubectl rollout status deployment/{{ service_name }}
+    -n {{ app_namespace }}
+    --timeout={{ wait_timeout_seconds }}s
+  changed_when: false

@@ -1,0 +1,66 @@
+---
+project_name: gocartops
+env: dev
+aws_region: ap-south-1
+
+# EKS cluster from Terraform output / terraform.tfvars
+eks_cluster_name: gocartops-dev-eks
+kubeconfig_path: "{{ lookup('env', 'USERPROFILE') | default(lookup('env', 'HOME'), true) }}/.kube/config"
+
+# Namespaces
+app_namespace: gocart-dev
+monitoring_namespace: monitoring
+
+# RBAC for app deployments
+app_deployer_service_account: gocart-deployer
+app_deployer_role_name: gocart-deployer-role
+app_deployer_role_binding_name: gocart-deployer-binding
+
+# ResourceQuota for app namespace
+resource_quota_name: gocart-dev-quota
+quota_requests_cpu: "1200m"
+quota_requests_memory: "1536Mi"
+quota_limits_cpu: "2400m"
+quota_limits_memory: "3072Mi"
+quota_pods: "20"
+quota_services: "10"
+quota_configmaps: "20"
+quota_secrets: "20"
+
+# Default pod limits in app namespace
+limit_range_name: gocart-default-limits
+default_cpu_limit: "500m"
+default_memory_limit: "512Mi"
+default_cpu_request: "100m"
+default_memory_request: "128Mi"
+
+# AWS Load Balancer Controller
+alb_controller_enabled: true
+alb_controller_release_name: aws-load-balancer-controller
+alb_controller_namespace: kube-system
+alb_controller_service_account_name: aws-load-balancer-controller
+alb_controller_iam_policy_name: AWSLoadBalancerControllerIAMPolicy-gocartops-dev
+alb_controller_iam_role_name: gocartops-dev-aws-load-balancer-controller
+alb_controller_policy_url: "https://raw.githubusercontent.com/kubernetes-sigs/aws-load-balancer-controller/v2.13.4/docs/install/iam_policy.json"
+alb_controller_chart_repo: "https://aws.github.io/eks-charts"
+alb_controller_chart_ref: "aws-load-balancer-controller"
+alb_controller_chart_version: ""
+
+# Metrics Server
+metrics_server_enabled: true
+metrics_server_release_name: metrics-server
+metrics_server_namespace: kube-system
+metrics_server_chart_repo: "https://kubernetes-sigs.github.io/metrics-server/"
+metrics_server_chart_ref: "metrics-server"
+metrics_server_chart_version: "3.13.0"
+
+# Prometheus and Grafana
+monitoring_enabled: true
+monitoring_release_name: kube-prometheus-stack
+prometheus_chart_repo: "https://prometheus-community.github.io/helm-charts"
+prometheus_chart_ref: "kube-prometheus-stack"
+prometheus_chart_version: "86.1.1"
+grafana_admin_user: admin
+grafana_service_type: ClusterIP
+
+wait_timeout_seconds: 600

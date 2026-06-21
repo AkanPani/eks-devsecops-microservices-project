@@ -1,0 +1,29 @@
+---
+- name: Update yum packages
+  ansible.builtin.yum:
+    name: "*"
+    state: latest
+  when: ansible_os_family == "RedHat"
+
+- name: Install basic packages
+  ansible.builtin.package:
+    name:
+      - git
+      - docker
+      - unzip
+      - wget
+      - curl
+    state: present
+
+- name: Enable Docker
+  ansible.builtin.service:
+    name: docker
+    state: started
+    enabled: true
+
+- name: Add ec2-user to docker group
+  ansible.builtin.user:
+    name: ec2-user
+    groups: docker
+    append: true
+  when: ansible_user_id is defined

@@ -1,0 +1,116 @@
+---
+- name: Create application namespace
+  kubernetes.core.k8s:
+    state: present
+    definition:
+      apiVersion: v1
+      kind: Namespace
+      metadata:
+        name: "{{ app_namespace }}"
+        labels:
+          name: "{{ app_namespace }}"
+          environment: "{{ env }}"
+          project: "{{ project_name }}"
+
+- name: Create monitoring namespace
+  kubernetes.core.k8s:
+    state: present
+    definition:
+      apiVersion: v1
+      kind: Namespace
+      metadata:
+        name: "{{ monitoring_namespace }}"
+        labels:
+          name: "{{ monitoring_namespace }}"
+          environment: "{{ env }}"
+          project: "{{ project_name }}"
+
+- name: Create app deployer service account
+  kubernetes.core.k8s:
+    state: present
+    definition:
+      apiVersion: v1
+      kind: ServiceAccount
+      metadata:
+        name: "{{ app_deployer_service_account }}"
+        namespace: "{{ app_namespace }}"
+
+- name: Create app namespace RBAC role
+  kubernetes.core.k8s:
+    state: present
+    definition:
+      apiVersion: rbac.authorization.k8s.io/v1
+      kind: Role
+      metadata:
+        name: "{{ app_deployer_role_name }}"
+        namespace: "{{ app_namespace }}"
+      rules:
+        - apiGroups: [""]
+          resources: ["pods", "services", "configmaps", "secrets", "events"]
+          verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+        - apiGroups: ["apps"]
+          resources: ["deployments", "replicasets"]
+          verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+        - apiGroups: ["autoscaling"]
+          resources: ["horizontalpodautoscalers"]
+          verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+        - apiGroups: ["networking.k8s.io"]
+          resources: ["ingresses"]
+          verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+
+- name: Bind app deployer service account to RBAC role
+  kubernetes.core.k8s:
+    state: present
+    definition:
+      apiVersion: rbac.authorization.k8s.io/v1
+      kind: RoleBinding
+      metadata:
+        name: "{{ app_deployer_role_binding_name }}"
+        namespace: "{{ app_namespace }}"
+      subjects:
+        - kind: ServiceAccount
+          name: "{{ app_deployer_service_account }}"
+          namespace: "{{ app_namespace }}"
+      roleRef:
+        kind: Role
+        name: "{{ app_deployer_role_name }}"
+        apiGroup: rbac.authorization.k8s.io
+
+- name: Create resource quota for app namespace
+  kubernetes.core.k8s:
+    state: present
+    definition:
+      apiVersion: v1
+      kind: ResourceQuota
+      metadata:
+        name: "{{ resource_quota_name }}"
+        namespace: "{{ app_namespace }}"
+      spec:
+        hard:
+          requests.cpu: "{{ quota_requests_cpu }}"
+          requests.memory: "{{ quota_requests_memory }}"
+          limits.cpu: "{{ quota_limits_cpu }}"
+          limits.memory: "{{ quota_limits_memory }}"
+          pods: "{{ quota_pods }}"
+          services: "{{ quota_services }}"
+          configmaps: "{{ quota_configmaps }}"
+          secrets: "{{ quota_secrets }}"
+
+- name: Create default limit range for app namespace
+  kubernetes.core.k8s:
+    state: present
+    definition:
+      apiVersion: v1
+      kind: LimitRange
+      metadata:
+        name: "{{ limit_range_name }}"
+        namespace: "{{ app_namespace }}"
+      spec:
+        limits:
+          - type: Container
+            default:
+              cpu: "{{ default_cpu_limit }}"
+              memory: "{{ default_memory_limit }}"
+            defaultRequest:
+              cpu: "{{ default_cpu_request }}"
+              memory: "{{ default_memory_request }}"

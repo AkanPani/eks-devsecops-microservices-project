@@ -1,0 +1,32 @@
+---
+- name: Deploy all GoCartOps services using Helm
+  hosts: localhost
+  connection: local
+  gather_facts: false
+
+  vars_files:
+    - "../group_vars/{{ env | default('dev') }}/vars.yml"
+    - "../group_vars/{{ env | default('dev') }}/vault.yml"
+
+  tasks:
+    - name: Deploy product-service
+      kubernetes.core.helm:
+        name: product-service
+        chart_ref: "../../helm/gocart-service"
+        release_namespace: "{{ app_namespace }}"
+        create_namespace: true
+        values_files:
+          - "../../helm-values/{{ env | default('dev') }}/product-service-values.yaml"
+        wait: true
+        timeout: 10m
+
+    - name: Deploy order-service
+      kubernetes.core.helm:
+        name: order-service
+        chart_ref: "../../helm/gocart-service"
+        release_namespace: "{{ app_namespace }}"
+        create_namespace: true
+        values_files:
+          - "../../helm-values/{{ env | default('dev') }}/order-service-values.yaml"
+        wait: true
+        timeout: 10m
