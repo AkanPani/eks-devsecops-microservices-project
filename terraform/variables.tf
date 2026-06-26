@@ -225,3 +225,15 @@ variable "product_service_account_name" {
   type        = string
   default     = "product-service-sa"
 }
+
+variable "public_subnet_cidr" {
+  default = "10.20.0.0/16"
+}
+
+variable "instance_type" {
+  default = "t3.micro"
+}
+
+variable "key_name" {
+  description = "Existing AWS Key Pair"
+}

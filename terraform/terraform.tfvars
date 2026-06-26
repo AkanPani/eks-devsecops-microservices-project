@@ -50,3 +50,6 @@ db_skip_final_snapshot = true
 kubernetes_namespace         = "gocartops-dev"
 product_service_account_name = "product-service-sa"
 order_service_account_name   = "order-service-sa"
+
+#EC2
+key_name = "test_new"

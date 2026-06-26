@@ -304,181 +304,207 @@
 
 /////////////////////////////////////////////////////////////
 
+/////////////////////////////////////////////////////////////
+
+////////////////////////////////////////////////////////////
+
+//pipeline {
+//    agent any
+//
+//    tools {
+//        go 'Go-1.22'
+//    }
+//
+//    environment {
+//        PRODUCT_SERVICE_DIR = 'product-service'
+//        ORDER_SERVICE_DIR   = 'order-service'
+//        BUILD_DIR           = 'build-artifacts'
+//    }
+//
+//    options {
+//        timestamps()
+//        ansiColor('xterm')
+//        skipDefaultCheckout(false)
+//    }
+//
+//    stages {
+//
+//        stage('Checkout Source Code') {
+//            steps {
+//                echo 'Checking out source code from GitHub...'
+//                checkout scm
+//            }
+//        }
+//
+//        stage('Validate Repository Structure') {
+//            steps {
+//                echo 'Validating required folders and files...'
+//
+//                sh '''
+//                    echo "Current workspace:"
+//                    pwd
+//
+//                    echo "Repository files:"
+//                    ls -la
+//
+//                    if [ ! -d "$PRODUCT_SERVICE_DIR" ]; then
+//                      echo "ERROR: product-service folder not found"
+//                      exit 1
+//                    fi
+//
+//                    if [ ! -d "$ORDER_SERVICE_DIR" ]; then
+//                      echo "ERROR: order-service folder not found"
+//                      exit 1
+//                    fi
+//
+//                    if [ ! -f "$PRODUCT_SERVICE_DIR/go.mod" ]; then
+//                      echo "ERROR: product-service/go.mod not found"
+//                      exit 1
+//                    fi
+//
+//                    if [ ! -f "$ORDER_SERVICE_DIR/go.mod" ]; then
+//                      echo "ERROR: order-service/go.mod not found"
+//                      exit 1
+//                    fi
+//
+//                    echo "Repository structure validation completed successfully."
+//                '''
+//            }
+//        }
+//
+//        stage('Go Version Check') {
+//            steps {
+//                echo 'Checking Go version installed in Jenkins...'
+//
+//                sh '''
+//                    go version
+//                    go env GOPATH
+//                    go env GOMODCACHE
+//                '''
+//            }
+//        }
+//
+//        stage('Download Dependencies') {
+//            parallel {
+//                stage('Product Service Dependencies') {
+//                    steps {
+//                        dir("${PRODUCT_SERVICE_DIR}") {
+//                            sh '''
+//                                echo "Downloading product-service dependencies..."
+//                                go mod download
+//                                go mod tidy
+//                            '''
+//                        }
+//                    }
+//                }
+//
+//                stage('Order Service Dependencies') {
+//                    steps {
+//                        dir("${ORDER_SERVICE_DIR}") {
+//                            sh '''
+//                                echo "Downloading order-service dependencies..."
+//                                go mod download
+//                                go mod tidy
+//                            '''
+//                        }
+//                    }
+//                }
+//            }
+//        }
+//
+//        stage('Run Unit Tests') {
+//            parallel {
+//                stage('Product Service Tests') {
+//                    steps {
+//                        dir("${PRODUCT_SERVICE_DIR}") {
+//                            sh '''
+//                                echo "Running product-service tests..."
+//                                go test ./... -v
+//                            '''
+//                        }
+//                    }
+//                }
+//
+//                stage('Order Service Tests') {
+//                    steps {
+//                        dir("${ORDER_SERVICE_DIR}") {
+//                            sh '''
+//                                echo "Running order-service tests..."
+//                                go test ./... -v
+//                            '''
+//                        }
+//                    }
+//                }
+//            }
+//        }
+//
+//        stage('Build Go Services') {
+//            steps {
+//                echo 'Building Go services...'
+//
+//                sh '''
+//                    rm -rf "$BUILD_DIR"
+//                    mkdir -p "$BUILD_DIR"
+//
+//                    echo "Building product-service..."
+//                    cd "$PRODUCT_SERVICE_DIR"
+//                    go build -o "../$BUILD_DIR/product-service" .
+//                    cd ..
+//
+//                    echo "Building order-service..."
+//                    cd "$ORDER_SERVICE_DIR"
+//                    go build -o "../$BUILD_DIR/order-service" .
+//                    cd ..
+//
+//                    echo "Generated build artifacts:"
+//                    ls -lh "$BUILD_DIR"
+//                '''
+//            }
+//        }
+//
+//        stage('Archive Build Artifacts') {
+//            steps {
+//                echo 'Archiving build artifacts...'
+//
+//                archiveArtifacts artifacts: 'build-artifacts/*', fingerprint: true
+//            }
+//        }
+//    }
+//
+//    post {
+//        success {
+//            echo 'Phase 1 completed successfully: GitHub checkout, Go test, Go build, and artifact archive are working.'
+//        }
+//
+//        failure {
+//            echo 'Phase 1 failed. Check the failed stage logs in Jenkins.'
+//        }
+//
+//        always {
+//            echo 'Cleaning Jenkins workspace...'
+//            cleanWs()
+//        }
+//    }
+//}
+
+
+///////////////////////////////////////////////////////////////////////
+
 pipeline {
     agent any
 
-    tools {
-        go 'Go-1.22'
-    }
-
-    environment {
-        PRODUCT_SERVICE_DIR = 'product-service'
-        ORDER_SERVICE_DIR   = 'order-service'
-        BUILD_DIR           = 'build-artifacts'
-    }
-
-    options {
-        timestamps()
-        ansiColor('xterm')
-        skipDefaultCheckout(false)
-    }
-
     stages {
-
-        stage('Checkout Source Code') {
+        stage('Step 2 - GitHub Checkout Only') {
             steps {
-                echo 'Checking out source code from GitHub...'
                 checkout scm
-            }
-        }
-
-        stage('Validate Repository Structure') {
-            steps {
-                echo 'Validating required folders and files...'
 
                 sh '''
-                    echo "Current workspace:"
+                    echo "GitHub checkout successful"
                     pwd
-
-                    echo "Repository files:"
                     ls -la
-
-                    if [ ! -d "$PRODUCT_SERVICE_DIR" ]; then
-                      echo "ERROR: product-service folder not found"
-                      exit 1
-                    fi
-
-                    if [ ! -d "$ORDER_SERVICE_DIR" ]; then
-                      echo "ERROR: order-service folder not found"
-                      exit 1
-                    fi
-
-                    if [ ! -f "$PRODUCT_SERVICE_DIR/go.mod" ]; then
-                      echo "ERROR: product-service/go.mod not found"
-                      exit 1
-                    fi
-
-                    if [ ! -f "$ORDER_SERVICE_DIR/go.mod" ]; then
-                      echo "ERROR: order-service/go.mod not found"
-                      exit 1
-                    fi
-
-                    echo "Repository structure validation completed successfully."
+                    git log -1 --oneline
                 '''
             }
-        }
-
-        stage('Go Version Check') {
-            steps {
-                echo 'Checking Go version installed in Jenkins...'
-
-                sh '''
-                    go version
-                    go env GOPATH
-                    go env GOMODCACHE
-                '''
-            }
-        }
-
-        stage('Download Dependencies') {
-            parallel {
-                stage('Product Service Dependencies') {
-                    steps {
-                        dir("${PRODUCT_SERVICE_DIR}") {
-                            sh '''
-                                echo "Downloading product-service dependencies..."
-                                go mod download
-                                go mod tidy
-                            '''
-                        }
-                    }
-                }
-
-                stage('Order Service Dependencies') {
-                    steps {
-                        dir("${ORDER_SERVICE_DIR}") {
-                            sh '''
-                                echo "Downloading order-service dependencies..."
-                                go mod download
-                                go mod tidy
-                            '''
-                        }
-                    }
-                }
-            }
-        }
-
-        stage('Run Unit Tests') {
-            parallel {
-                stage('Product Service Tests') {
-                    steps {
-                        dir("${PRODUCT_SERVICE_DIR}") {
-                            sh '''
-                                echo "Running product-service tests..."
-                                go test ./... -v
-                            '''
-                        }
-                    }
-                }
-
-                stage('Order Service Tests') {
-                    steps {
-                        dir("${ORDER_SERVICE_DIR}") {
-                            sh '''
-                                echo "Running order-service tests..."
-                                go test ./... -v
-                            '''
-                        }
-                    }
-                }
-            }
-        }
-
-        stage('Build Go Services') {
-            steps {
-                echo 'Building Go services...'
-
-                sh '''
-                    rm -rf "$BUILD_DIR"
-                    mkdir -p "$BUILD_DIR"
-
-                    echo "Building product-service..."
-                    cd "$PRODUCT_SERVICE_DIR"
-                    go build -o "../$BUILD_DIR/product-service" .
-                    cd ..
-
-                    echo "Building order-service..."
-                    cd "$ORDER_SERVICE_DIR"
-                    go build -o "../$BUILD_DIR/order-service" .
-                    cd ..
-
-                    echo "Generated build artifacts:"
-                    ls -lh "$BUILD_DIR"
-                '''
-            }
-        }
-
-        stage('Archive Build Artifacts') {
-            steps {
-                echo 'Archiving build artifacts...'
-
-                archiveArtifacts artifacts: 'build-artifacts/*', fingerprint: true
-            }
-        }
-    }
-
-    post {
-        success {
-            echo 'Phase 1 completed successfully: GitHub checkout, Go test, Go build, and artifact archive are working.'
-        }
-
-        failure {
-            echo 'Phase 1 failed. Check the failed stage logs in Jenkins.'
-        }
-
-        always {
-            echo 'Cleaning Jenkins workspace...'
-            cleanWs()
         }
     }
 }

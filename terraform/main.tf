@@ -1,30 +1,3 @@
-terraform {
-  required_version = ">= 1.6.0"
-
-  required_providers {
-    aws = {
-      source  = "hashicorp/aws"
-      version = "~> 5.0"
-    }
-    random = {
-      source  = "hashicorp/random"
-      version = "~> 3.6"
-    }
-    tls = {
-      source  = "hashicorp/tls"
-      version = "~> 4.0"
-    }
-  }
-}
-
-provider "aws" {
-  region = var.aws_region
-
-  default_tags {
-    tags = local.common_tags
-  }
-}
-
 data "aws_availability_zones" "available" {
   state = "available"
 }
@@ -141,3 +114,103 @@ module "iam" {
 
   tags = local.common_tags
 }
+
+#########################################################
+#JENKINS#
+#########################################################
+# resource "aws_vpc" "jenkins_vpc" {
+#   cidr_block           = var.vpc_cidr
+#   enable_dns_support   = true
+#   enable_dns_hostnames = true
+#
+#   tags = {
+#     Name = "jenkins-vpc"
+#   }
+# }
+#
+# resource "aws_subnet" "public_subnet" {
+#   vpc_id                  = aws_vpc.jenkins_vpc.id
+#   cidr_block              = var.public_subnet_cidr
+#   availability_zone       = "ap-south-1a"
+#   map_public_ip_on_launch = true
+#
+#   tags = {
+#     Name = "jenkins-public-subnet"
+#   }
+# }
+#
+# resource "aws_internet_gateway" "igw" {
+#   vpc_id = aws_vpc.jenkins_vpc.id
+#
+#   tags = {
+#     Name = "jenkins-igw"
+#   }
+# }
+#
+# resource "aws_route_table" "public_rt" {
+#   vpc_id = aws_vpc.jenkins_vpc.id
+#
+#   route {
+#     cidr_block = "0.0.0.0/0"
+#     gateway_id = aws_internet_gateway.igw.id
+#   }
+# }
+#
+# resource "aws_route_table_association" "public_assoc" {
+#   subnet_id      = aws_subnet.public_subnet.id
+#   route_table_id = aws_route_table.public_rt.id
+# }
+#
+# resource "aws_security_group" "jenkins_sg" {
+#   name   = "jenkins-sg"
+#   vpc_id = aws_vpc.jenkins_vpc.id
+#
+#   ingress {
+#     description = "SSH"
+#     from_port   = 22
+#     to_port     = 22
+#     protocol    = "tcp"
+#     cidr_blocks = ["49.207.201.244/32"]
+#   }
+#
+#   ingress {
+#     description = "Jenkins"
+#     from_port   = 8080
+#     to_port     = 8080
+#     protocol    = "tcp"
+#     cidr_blocks = ["49.207.201.244/32"]
+#   }
+#
+#   egress {
+#     from_port   = 0
+#     to_port     = 0
+#     protocol    = "-1"
+#     cidr_blocks = ["0.0.0.0/0"]
+#   }
+# }
+#
+# data "aws_ami" "amazon_linux" {
+#   most_recent = true
+#
+#   owners = ["amazon"]
+#
+#   filter {
+#     name   = "name"
+#     values = ["al2023-ami-*-x86_64"]
+#   }
+# }
+#
+# resource "aws_instance" "jenkins" {
+#
+#   ami                    = data.aws_ami.amazon_linux.id
+#   instance_type          = var.instance_type
+#   subnet_id              = aws_subnet.public_subnet.id
+#   key_name               = var.key_name
+#   vpc_security_group_ids = [aws_security_group.jenkins_sg.id]
+#
+#   tags = {
+#     Name        = "jenkins-server"
+#     Environment = "dev"
+#   }
+# }
+
