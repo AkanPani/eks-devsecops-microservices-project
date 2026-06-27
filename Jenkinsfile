@@ -499,6 +499,9 @@ pipeline {
         PRODUCT_IMAGE = "gocartops-product-service"
         ORDER_IMAGE   = "gocartops-order-service"
         IMAGE_TAG     = "${BUILD_NUMBER}"
+
+        PRODUCT_SERVICE_DIR = "services/product-service"
+        ORDER_SERVICE_DIR   = "services/order-service"
     }
 
     stages {
@@ -532,29 +535,40 @@ pipeline {
                 sh '''
                     echo "Starting Docker build..."
 
-                    echo "Checking Docker version..."
-                    docker version
+                    echo "Checking Docker command..."
+                    which docker
+                    docker --version
+
+                    echo "Current workspace:"
+                    pwd
+                    ls -la
+
+                    echo "Checking services folder:"
+                    ls -la services
+
+                    echo "Checking product-service folder:"
+                    ls -la "${PRODUCT_SERVICE_DIR}"
+
+                    echo "Checking order-service folder:"
+                    ls -la "${ORDER_SERVICE_DIR}"
 
                     echo "Checking Dockerfiles..."
-                    ls -la product-service
-                    ls -la order-service
-
-                    test -f product-service/Dockerfile
-                    test -f order-service/Dockerfile
+                    test -f "${PRODUCT_SERVICE_DIR}/Dockerfile"
+                    test -f "${ORDER_SERVICE_DIR}/Dockerfile"
 
                     echo "Building product-service Docker image..."
                     docker build \
                       -t ${PRODUCT_IMAGE}:${IMAGE_TAG} \
                       -t ${PRODUCT_IMAGE}:latest \
-                      -f product-service/Dockerfile \
-                      product-service
+                      -f "${PRODUCT_SERVICE_DIR}/Dockerfile" \
+                      "${PRODUCT_SERVICE_DIR}"
 
                     echo "Building order-service Docker image..."
                     docker build \
                       -t ${ORDER_IMAGE}:${IMAGE_TAG} \
                       -t ${ORDER_IMAGE}:latest \
-                      -f order-service/Dockerfile \
-                      order-service
+                      -f "${ORDER_SERVICE_DIR}/Dockerfile" \
+                      "${ORDER_SERVICE_DIR}"
 
                     echo "Docker images created:"
                     docker images | grep gocartops || true
