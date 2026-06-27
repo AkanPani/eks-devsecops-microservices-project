@@ -495,6 +495,10 @@ pipeline {
 
     environment {
         SCANNER_HOME = tool 'SonarScanner'
+
+        PRODUCT_IMAGE = "gocartops-product-service"
+        ORDER_IMAGE   = "gocartops-order-service"
+        IMAGE_TAG     = "${BUILD_NUMBER}"
     }
 
     stages {
@@ -520,6 +524,43 @@ pipeline {
                         echo "SonarQube scan completed successfully"
                     '''
                 }
+            }
+        }
+
+        stage('Step 4 - Docker Build') {
+            steps {
+                sh '''
+                    echo "Starting Docker build..."
+
+                    echo "Checking Docker version..."
+                    docker version
+
+                    echo "Checking Dockerfiles..."
+                    ls -la product-service
+                    ls -la order-service
+
+                    test -f product-service/Dockerfile
+                    test -f order-service/Dockerfile
+
+                    echo "Building product-service Docker image..."
+                    docker build \
+                      -t ${PRODUCT_IMAGE}:${IMAGE_TAG} \
+                      -t ${PRODUCT_IMAGE}:latest \
+                      -f product-service/Dockerfile \
+                      product-service
+
+                    echo "Building order-service Docker image..."
+                    docker build \
+                      -t ${ORDER_IMAGE}:${IMAGE_TAG} \
+                      -t ${ORDER_IMAGE}:latest \
+                      -f order-service/Dockerfile \
+                      order-service
+
+                    echo "Docker images created:"
+                    docker images | grep gocartops || true
+
+                    echo "Docker build completed successfully"
+                '''
             }
         }
     }
