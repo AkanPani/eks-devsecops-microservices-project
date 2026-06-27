@@ -494,6 +494,10 @@
 pipeline {
     agent any
 
+    environment {
+        SCANNER_HOME = tool 'SonarScanner'
+    }
+
     stages {
         stage('Step 2 - GitHub Checkout Only') {
             steps {
@@ -505,6 +509,18 @@ pipeline {
                     ls -la
                     git log -1 --oneline
                 '''
+            }
+        }
+
+        stage('Step 3 - SonarQube Scan') {
+            steps {
+                withSonarQubeEnv('SonarQube-Server') {
+                    sh '''
+                        echo "Starting SonarQube scan..."
+                        ${SCANNER_HOME}/bin/sonar-scanner
+                        echo "SonarQube scan completed successfully"
+                    '''
+                }
             }
         }
     }
