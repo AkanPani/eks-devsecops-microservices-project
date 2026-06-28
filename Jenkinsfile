@@ -880,6 +880,10 @@ pipeline {
 
         PROMETHEUS_SERVICE_PORT = "9090"
         GRAFANA_SERVICE_PORT    = "80"
+
+        K8S_NAMESPACE = "gocartops-dev"
+        MONITORING_NAMESPACE = "monitoring"
+
     }
 
     stages {
@@ -1579,6 +1583,112 @@ pipeline {
                 kill ${GRAFANA_PID} || true
 
                 echo "Prometheus/Grafana health check completed successfully"
+            '''
+                }
+            }
+        }
+
+        stage('Step 15 - Destroy Everything') {
+            steps {
+                input message: 'This will delete Kubernetes apps and AWS infrastructure. Do you really want to destroy everything?', ok: 'Destroy Now'
+
+                withAWS(credentials: 'aws-creds', region: "${AWS_REGION}") {
+                    sh '''
+                echo "Starting full cleanup and destroy..."
+
+                echo "Checking AWS identity..."
+                aws sts get-caller-identity
+
+                echo "Trying to update kubeconfig for EKS cluster..."
+                aws eks update-kubeconfig \
+                  --region "${AWS_REGION}" \
+                  --name "${EKS_CLUSTER_NAME}" || true
+
+                echo "Checking if kubectl can access cluster..."
+                kubectl get nodes || true
+
+                echo "Uninstalling application Helm releases..."
+                helm uninstall "${PRODUCT_RELEASE}" -n "${K8S_NAMESPACE}" || true
+                helm uninstall "${ORDER_RELEASE}" -n "${K8S_NAMESPACE}" || true
+
+                echo "Uninstalling common bootstrap/monitoring Helm releases if present..."
+                helm uninstall aws-load-balancer-controller -n kube-system || true
+                helm uninstall metrics-server -n kube-system || true
+                helm uninstall kube-prometheus-stack -n "${MONITORING_NAMESPACE}" || true
+                helm uninstall prometheus -n "${MONITORING_NAMESPACE}" || true
+                helm uninstall grafana -n "${MONITORING_NAMESPACE}" || true
+
+                echo "Deleting application namespace..."
+                kubectl delete namespace "${K8S_NAMESPACE}" --ignore-not-found=true || true
+
+                echo "Deleting monitoring namespace..."
+                kubectl delete namespace "${MONITORING_NAMESPACE}" --ignore-not-found=true || true
+
+                echo "Waiting for load balancers and Kubernetes resources to clean up..."
+                sleep 60
+
+                echo "Cleaning ECR images before Terraform destroy..."
+                aws ecr list-images \
+                  --repository-name "${PRODUCT_ECR_REPO}" \
+                  --region "${AWS_REGION}" \
+                  --query 'imageIds[*]' \
+                  --output json > product-image-ids.json || true
+
+                if [ -f product-image-ids.json ] && [ "$(cat product-image-ids.json)" != "[]" ]; then
+                  aws ecr batch-delete-image \
+                    --repository-name "${PRODUCT_ECR_REPO}" \
+                    --region "${AWS_REGION}" \
+                    --image-ids file://product-image-ids.json || true
+                fi
+
+                aws ecr list-images \
+                  --repository-name "${ORDER_ECR_REPO}" \
+                  --region "${AWS_REGION}" \
+                  --query 'imageIds[*]' \
+                  --output json > order-image-ids.json || true
+
+                if [ -f order-image-ids.json ] && [ "$(cat order-image-ids.json)" != "[]" ]; then
+                  aws ecr batch-delete-image \
+                    --repository-name "${ORDER_ECR_REPO}" \
+                    --region "${AWS_REGION}" \
+                    --image-ids file://order-image-ids.json || true
+                fi
+
+                echo "Moving to Terraform directory..."
+                cd "${TERRAFORM_DIR}"
+
+                echo "Initializing Terraform backend..."
+                terraform init -reconfigure
+
+                echo "Showing current Terraform state resources..."
+                terraform state list || true
+
+                echo "Running Terraform destroy..."
+                terraform destroy \
+                  -auto-approve \
+                  -var="aws_region=${AWS_REGION}"
+
+                echo "Terraform destroy completed successfully"
+
+                echo "Optional backend cleanup starts now..."
+
+                BACKEND_BUCKET="gocartops-dev-tfstate-${AWS_ACCOUNT_ID}-${AWS_REGION}"
+                LOCK_TABLE="gocartops-dev-tf-locks"
+
+                echo "Emptying Terraform backend S3 bucket..."
+                aws s3 rm "s3://${BACKEND_BUCKET}" --recursive || true
+
+                echo "Deleting Terraform backend S3 bucket..."
+                aws s3api delete-bucket \
+                  --bucket "${BACKEND_BUCKET}" \
+                  --region "${AWS_REGION}" || true
+
+                echo "Deleting DynamoDB lock table..."
+                aws dynamodb delete-table \
+                  --table-name "${LOCK_TABLE}" \
+                  --region "${AWS_REGION}" || true
+
+                echo "Full cleanup and destroy completed successfully"
             '''
                 }
             }
