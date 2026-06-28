@@ -829,8 +829,6 @@ pipeline {
                         terraform plan \
                           -out="${TF_PLAN_FILE}" \
                           -var="aws_region=${AWS_REGION}" \
-                          -var="product_image=${ECR_REGISTRY}/${PRODUCT_ECR_REPO}:${IMAGE_TAG}" \
-                          -var="order_image=${ECR_REGISTRY}/${ORDER_ECR_REPO}:${IMAGE_TAG}"
 
                         echo "Terraform plan completed successfully"
                         ls -la
