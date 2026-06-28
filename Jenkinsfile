@@ -665,7 +665,80 @@ pipeline {
                 '''
             }
         }
+        stage('Step 8A - Terraform Backend Bootstrap') {
+            steps {
+                withAWS(credentials: 'aws-creds', region: "${AWS_REGION}") {
+                    sh '''
+                echo "Starting Terraform backend bootstrap..."
 
+                BACKEND_BUCKET="gocartops-dev-tfstate-${AWS_ACCOUNT_ID}-${AWS_REGION}"
+                LOCK_TABLE="gocartops-dev-tf-locks"
+
+                echo "Backend bucket: ${BACKEND_BUCKET}"
+                echo "Lock table: ${LOCK_TABLE}"
+
+                echo "Checking AWS identity..."
+                aws sts get-caller-identity
+
+                echo "Checking if S3 backend bucket exists..."
+                if aws s3api head-bucket --bucket "${BACKEND_BUCKET}" 2>/dev/null; then
+                  echo "S3 backend bucket already exists: ${BACKEND_BUCKET}"
+                else
+                  echo "Creating S3 backend bucket: ${BACKEND_BUCKET}"
+
+                  aws s3api create-bucket \
+                    --bucket "${BACKEND_BUCKET}" \
+                    --region "${AWS_REGION}" \
+                    --create-bucket-configuration LocationConstraint="${AWS_REGION}"
+
+                  echo "Enabling versioning on backend bucket..."
+                  aws s3api put-bucket-versioning \
+                    --bucket "${BACKEND_BUCKET}" \
+                    --versioning-configuration Status=Enabled
+
+                  echo "Enabling default encryption on backend bucket..."
+                  aws s3api put-bucket-encryption \
+                    --bucket "${BACKEND_BUCKET}" \
+                    --server-side-encryption-configuration '{
+                      "Rules": [
+                        {
+                          "ApplyServerSideEncryptionByDefault": {
+                            "SSEAlgorithm": "AES256"
+                          }
+                        }
+                      ]
+                    }'
+
+                  echo "Blocking public access on backend bucket..."
+                  aws s3api put-public-access-block \
+                    --bucket "${BACKEND_BUCKET}" \
+                    --public-access-block-configuration BlockPublicAcls=true,IgnorePublicAcls=true,BlockPublicPolicy=true,RestrictPublicBuckets=true
+                fi
+
+                echo "Checking if DynamoDB lock table exists..."
+                if aws dynamodb describe-table --table-name "${LOCK_TABLE}" --region "${AWS_REGION}" >/dev/null 2>&1; then
+                  echo "DynamoDB lock table already exists: ${LOCK_TABLE}"
+                else
+                  echo "Creating DynamoDB lock table: ${LOCK_TABLE}"
+
+                  aws dynamodb create-table \
+                    --table-name "${LOCK_TABLE}" \
+                    --attribute-definitions AttributeName=LockID,AttributeType=S \
+                    --key-schema AttributeName=LockID,KeyType=HASH \
+                    --billing-mode PAY_PER_REQUEST \
+                    --region "${AWS_REGION}"
+
+                  echo "Waiting for DynamoDB lock table to become active..."
+                  aws dynamodb wait table-exists \
+                    --table-name "${LOCK_TABLE}" \
+                    --region "${AWS_REGION}"
+                fi
+
+                echo "Terraform backend bootstrap completed successfully"
+            '''
+                }
+            }
+        }
         stage('Step 7 - Docker Push to ECR') {
             steps {
                 withAWS(credentials: 'aws-creds', region: "${AWS_REGION}") {
