@@ -868,7 +868,38 @@ pipeline {
             '''
           }
        }
+        stage('Step 10 - Terraform Apply') {
+            steps {
+                input message: 'Do you want to apply Terraform changes?', ok: 'Apply Now'
 
+                withAWS(credentials: 'aws-creds', region: "${AWS_REGION}") {
+                    sh '''
+                echo "Starting Terraform apply..."
+
+                echo "Checking AWS identity..."
+                aws sts get-caller-identity
+
+                echo "Moving to Terraform directory..."
+                cd "${TERRAFORM_DIR}"
+
+                echo "Current Terraform directory:"
+                pwd
+                ls -la
+
+                echo "Checking Terraform plan file..."
+                test -f "${TF_PLAN_FILE}"
+
+                echo "Applying Terraform plan..."
+                terraform apply -auto-approve "${TF_PLAN_FILE}"
+
+                echo "Terraform apply completed successfully"
+
+                echo "Terraform outputs:"
+                terraform output || true
+            '''
+                }
+            }
+        }
     }
 
 }
