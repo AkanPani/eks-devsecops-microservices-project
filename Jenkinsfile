@@ -505,7 +505,7 @@ pipeline {
         ORDER_SERVICE_DIR   = "services/order-service"
 
         AWS_REGION     = "ap-south-1"
-        AWS_ACCOUNT_ID = "123456789012"
+        AWS_ACCOUNT_ID = "548932260906"
 
         ECR_REGISTRY = "${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com"
 
