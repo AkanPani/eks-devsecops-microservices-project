@@ -861,6 +861,14 @@ pipeline {
 
         TERRAFORM_DIR = "terraform"
         TF_PLAN_FILE  = "tfplan"
+
+        ZAP_REPORT_DIR = "zap-reports"
+
+        PRODUCT_SERVICE_PORT = "8081"
+        ORDER_SERVICE_PORT   = "8082"
+
+        PRODUCT_LOCAL_PORT = "18081"
+        ORDER_LOCAL_PORT   = "18082"
     }
 
     stages {
@@ -877,7 +885,7 @@ pipeline {
                 '''
             }
         }
-        
+
         stage('Step 3 - SonarQube Scan') {
             steps {
                 withSonarQubeEnv('SonarQube-Server') {
@@ -1386,6 +1394,83 @@ pipeline {
                 kubectl get all -n "${K8S_NAMESPACE}"
 
                 echo "Helm deploy to EKS completed successfully"
+            '''
+                }
+            }
+        }
+        stage('Step 13 - OWASP ZAP Scan') {
+            steps {
+                withAWS(credentials: 'aws-creds', region: "${AWS_REGION}") {
+                    sh '''
+                echo "Starting OWASP ZAP scan..."
+
+                echo "Updating kubeconfig for EKS cluster..."
+                aws eks update-kubeconfig \
+                  --region "${AWS_REGION}" \
+                  --name "${EKS_CLUSTER_NAME}"
+
+                echo "Checking Kubernetes services..."
+                kubectl get svc -n "${K8S_NAMESPACE}"
+
+                mkdir -p "${ZAP_REPORT_DIR}"
+
+                echo "Starting port-forward for product-service..."
+                kubectl port-forward \
+                  -n "${K8S_NAMESPACE}" \
+                  svc/product-service \
+                  "${PRODUCT_LOCAL_PORT}:${PRODUCT_SERVICE_PORT}" \
+                  --address 0.0.0.0 > product-port-forward.log 2>&1 &
+
+                PRODUCT_PF_PID=$!
+
+                echo "Starting port-forward for order-service..."
+                kubectl port-forward \
+                  -n "${K8S_NAMESPACE}" \
+                  svc/order-service \
+                  "${ORDER_LOCAL_PORT}:${ORDER_SERVICE_PORT}" \
+                  --address 0.0.0.0 > order-port-forward.log 2>&1 &
+
+                ORDER_PF_PID=$!
+
+                echo "Waiting for port-forward to become ready..."
+                sleep 15
+
+                echo "Checking product-service locally..."
+                curl -I "http://localhost:${PRODUCT_LOCAL_PORT}/products" || true
+
+                echo "Checking order-service locally..."
+                curl -I "http://localhost:${ORDER_LOCAL_PORT}/orders" || true
+
+                echo "Running OWASP ZAP baseline scan for product-service..."
+                docker run --rm \
+                  --network container:jenkins-local \
+                  -v "$WORKSPACE/${ZAP_REPORT_DIR}:/zap/wrk" \
+                  zaproxy/zap-stable zap-baseline.py \
+                  -t "http://localhost:${PRODUCT_LOCAL_PORT}/products" \
+                  -r zap-product-service.html \
+                  -J zap-product-service.json \
+                  -w zap-product-service.md \
+                  -I || true
+
+                echo "Running OWASP ZAP baseline scan for order-service..."
+                docker run --rm \
+                  --network container:jenkins-local \
+                  -v "$WORKSPACE/${ZAP_REPORT_DIR}:/zap/wrk" \
+                  zaproxy/zap-stable zap-baseline.py \
+                  -t "http://localhost:${ORDER_LOCAL_PORT}/orders" \
+                  -r zap-order-service.html \
+                  -J zap-order-service.json \
+                  -w zap-order-service.md \
+                  -I || true
+
+                echo "Stopping port-forward processes..."
+                kill ${PRODUCT_PF_PID} || true
+                kill ${ORDER_PF_PID} || true
+
+                echo "OWASP ZAP reports generated:"
+                ls -la "${ZAP_REPORT_DIR}"
+
+                echo "OWASP ZAP scan completed successfully"
             '''
                 }
             }
