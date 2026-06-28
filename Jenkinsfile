@@ -827,7 +827,7 @@ pipeline {
                         echo "Terraform plan..."
                         terraform plan \
                           -out="${TF_PLAN_FILE}" \
-                          -var="aws_region=${AWS_REGION}" \
+                          -var="aws_region=${AWS_REGION}" 
 
                         echo "Terraform plan completed successfully"
                         ls -la
@@ -835,6 +835,40 @@ pipeline {
                 }
             }
         }
-    }
-}
 
+
+
+        stage('Step 9 - Checkov Scan') {
+            steps {
+                sh '''
+                 echo "Starting Checkov scan..."
+
+                 echo "Checking Terraform directory..."
+                 test -d "${TERRAFORM_DIR}"
+                 ls -la "${TERRAFORM_DIR}"
+
+                 mkdir -p checkov-reports
+
+                 echo "Running Checkov scan on Terraform code..."
+
+                 docker run --rm \
+                  -v "$WORKSPACE:/workspace" \
+                 bridgecrew/checkov:latest \
+                  -d /workspace/${TERRAFORM_DIR} \
+                  --framework terraform \
+                  --soft-fail \
+                  --output cli \
+                  --output json \
+                  --output-file-path console,/workspace/checkov-reports/checkov-report.json
+
+                echo "Checkov reports generated:"
+                ls -la checkov-reports || true
+
+                echo "Checkov scan completed successfully"
+            '''
+          }
+       }
+
+    }
+
+}
