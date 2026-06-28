@@ -877,8 +877,7 @@ pipeline {
                 '''
             }
         }
-
-        /*
+        
         stage('Step 3 - SonarQube Scan') {
             steps {
                 withSonarQubeEnv('SonarQube-Server') {
@@ -1331,8 +1330,8 @@ pipeline {
                 }
             }
         }
-        
-         */
+
+
         stage('Step 12 - Helm Deploy to EKS') {
             steps {
                 withAWS(credentials: 'aws-creds', region: "${AWS_REGION}") {
