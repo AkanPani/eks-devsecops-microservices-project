@@ -843,6 +843,13 @@ pipeline {
         AWS_REGION     = "ap-south-1"
         AWS_ACCOUNT_ID = "548932260906"
 
+        K8S_NAMESPACE   = "gocartops-dev"
+        HELM_CHART_DIR  = "helm/gocart-service"
+        HELM_VALUES_DIR = "helm-values/dev"
+
+        PRODUCT_RELEASE = "product-service"
+        ORDER_RELEASE   = "order-service"
+
         ENV_NAME         = "dev"
         EKS_CLUSTER_NAME = "gocartops-dev-eks"
         ANSIBLE_DIR      = "ansible"
@@ -1277,7 +1284,7 @@ pipeline {
                 }
             }
         }
-        */
+
 
         stage('Step 11 - Ansible Bootstrap') {
             steps {
@@ -1321,6 +1328,66 @@ pipeline {
 
                         echo "Ansible bootstrap completed successfully"
                     '''
+                }
+            }
+        }
+        
+         */
+        stage('Step 12 - Helm Deploy to EKS') {
+            steps {
+                withAWS(credentials: 'aws-creds', region: "${AWS_REGION}") {
+                    sh '''
+                echo "Starting Helm deploy to EKS..."
+
+                echo "Checking AWS identity..."
+                aws sts get-caller-identity
+
+                echo "Updating kubeconfig for EKS cluster..."
+                aws eks update-kubeconfig \
+                  --region "${AWS_REGION}" \
+                  --name "${EKS_CLUSTER_NAME}"
+
+                echo "Checking kubectl access..."
+                kubectl version --client
+                kubectl get nodes
+
+                echo "Checking Helm..."
+                helm version
+
+                echo "Checking Helm chart and values files..."
+                test -d "${HELM_CHART_DIR}"
+                test -f "${HELM_VALUES_DIR}/product-service-values.yaml"
+                test -f "${HELM_VALUES_DIR}/order-service-values.yaml"
+
+                echo "Creating namespace if not exists..."
+                kubectl create namespace "${K8S_NAMESPACE}" --dry-run=client -o yaml | kubectl apply -f -
+
+                echo "Deploying product-service with Helm..."
+                helm upgrade --install "${PRODUCT_RELEASE}" "${HELM_CHART_DIR}" \
+                  -n "${K8S_NAMESPACE}" \
+                  -f "${HELM_VALUES_DIR}/product-service-values.yaml" \
+                  --set image.repository="${ECR_REGISTRY}/${PRODUCT_ECR_REPO}" \
+                  --set image.tag="${IMAGE_TAG}" \
+                  --wait \
+                  --timeout 10m
+
+                echo "Deploying order-service with Helm..."
+                helm upgrade --install "${ORDER_RELEASE}" "${HELM_CHART_DIR}" \
+                  -n "${K8S_NAMESPACE}" \
+                  -f "${HELM_VALUES_DIR}/order-service-values.yaml" \
+                  --set image.repository="${ECR_REGISTRY}/${ORDER_ECR_REPO}" \
+                  --set image.tag="${IMAGE_TAG}" \
+                  --wait \
+                  --timeout 10m
+
+                echo "Checking deployed Helm releases..."
+                helm list -n "${K8S_NAMESPACE}"
+
+                echo "Checking Kubernetes resources..."
+                kubectl get all -n "${K8S_NAMESPACE}"
+
+                echo "Helm deploy to EKS completed successfully"
+            '''
                 }
             }
         }
