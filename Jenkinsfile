@@ -504,7 +504,6 @@ pipeline {
         PRODUCT_SERVICE_DIR = "services/product-service"
         ORDER_SERVICE_DIR   = "services/order-service"
 
-        TWISTLOCK_CONSOLE_URL = "https://your-twistlock-console-url"
     }
 
     stages {
@@ -580,83 +579,82 @@ pipeline {
                 '''
             }
         }
+
+        stage('Step 5 - Twistlock Image Scan') {
+            steps {
+                echo "Skipping Twistlock scan for local practice: Twistlock Console is not available."
+                echo "In real projects, this stage uses twistcli with Twistlock Console URL and credentials."
+            }
+        }
+
+        stage('Step 6 - Trivy Image Scan') {
+            steps {
+                sh '''
+                    echo "Starting Trivy image scan..."
+
+                    mkdir -p trivy-reports
+
+                    echo "Checking Docker images before scan..."
+                    docker images | grep gocartops || true
+
+                    echo "Scanning product-service image with Trivy..."
+                    docker run --rm \
+                      -v /var/run/docker.sock:/var/run/docker.sock \
+                      -v "$WORKSPACE/trivy-cache:/root/.cache/" \
+                      -v "$WORKSPACE/trivy-reports:/reports" \
+                      aquasec/trivy:latest image \
+                      --severity HIGH,CRITICAL \
+                      --exit-code 0 \
+                      --no-progress \
+                      --format table \
+                      --output /reports/trivy-product-service.txt \
+                      ${PRODUCT_IMAGE}:${IMAGE_TAG}
+
+                    docker run --rm \
+                      -v /var/run/docker.sock:/var/run/docker.sock \
+                      -v "$WORKSPACE/trivy-cache:/root/.cache/" \
+                      -v "$WORKSPACE/trivy-reports:/reports" \
+                      aquasec/trivy:latest image \
+                      --severity HIGH,CRITICAL \
+                      --exit-code 0 \
+                      --no-progress \
+                      --format json \
+                      --output /reports/trivy-product-service.json \
+                      ${PRODUCT_IMAGE}:${IMAGE_TAG}
+
+                    echo "Scanning order-service image with Trivy..."
+                    docker run --rm \
+                      -v /var/run/docker.sock:/var/run/docker.sock \
+                      -v "$WORKSPACE/trivy-cache:/root/.cache/" \
+                      -v "$WORKSPACE/trivy-reports:/reports" \
+                      aquasec/trivy:latest image \
+                      --severity HIGH,CRITICAL \
+                      --exit-code 0 \
+                      --no-progress \
+                      --format table \
+                      --output /reports/trivy-order-service.txt \
+                      ${ORDER_IMAGE}:${IMAGE_TAG}
+
+                    docker run --rm \
+                      -v /var/run/docker.sock:/var/run/docker.sock \
+                      -v "$WORKSPACE/trivy-cache:/root/.cache/" \
+                      -v "$WORKSPACE/trivy-reports:/reports" \
+                      aquasec/trivy:latest image \
+                      --severity HIGH,CRITICAL \
+                      --exit-code 0 \
+                      --no-progress \
+                      --format json \
+                      --output /reports/trivy-order-service.json \
+                      ${ORDER_IMAGE}:${IMAGE_TAG}
+
+                    echo "Trivy reports generated:"
+                    ls -la trivy-reports
+
+                    echo "Trivy image scan completed successfully"
+                '''
+            }
+        }
     }
-}
-
-
-             stage('Step 5 - Twistlock Image Scan') {
-                 steps {
-                     echo "Skipping Twistlock scan for local practice: Twistlock Console is not available."
-                     echo "In real projects, this stage uses twistcli with Twistlock Console URL and credentials."
-                        }
-}
-
-            stage('Step 6 - Trivy Image Scan') {
-                steps {
-                     sh '''
-                           echo "Starting Trivy image scan..."
-
-                            mkdir -p trivy-reports
-
-                            echo "Checking Docker images before scan..."
-                            docker images | grep gocartops || true
-                
-                            echo "Scanning product-service image with Trivy..."
-                            docker run --rm \
-                              -v /var/run/docker.sock:/var/run/docker.sock \
-                              -v "$WORKSPACE/trivy-cache:/root/.cache/" \
-                              -v "$WORKSPACE/trivy-reports:/reports" \
-                              aquasec/trivy:latest image \
-                              --severity HIGH,CRITICAL \
-                              --exit-code 0 \
-                              --no-progress \
-                              --format table \
-                              --output /reports/trivy-product-service.txt \
-                              ${PRODUCT_IMAGE}:${IMAGE_TAG}
-                
-                            docker run --rm \
-                              -v /var/run/docker.sock:/var/run/docker.sock \
-                              -v "$WORKSPACE/trivy-cache:/root/.cache/" \
-                              -v "$WORKSPACE/trivy-reports:/reports" \
-                              aquasec/trivy:latest image \
-                              --severity HIGH,CRITICAL \
-                              --exit-code 0 \
-                              --no-progress \
-                              --format json \
-                              --output /reports/trivy-product-service.json \
-                              ${PRODUCT_IMAGE}:${IMAGE_TAG}
-                
-                            echo "Scanning order-service image with Trivy..."
-                            docker run --rm \
-                              -v /var/run/docker.sock:/var/run/docker.sock \
-                              -v "$WORKSPACE/trivy-cache:/root/.cache/" \
-                              -v "$WORKSPACE/trivy-reports:/reports" \
-                              aquasec/trivy:latest image \
-                              --severity HIGH,CRITICAL \
-                              --exit-code 0 \
-                              --no-progress \
-                              --format table \
-                              --output /reports/trivy-order-service.txt \
-                              ${ORDER_IMAGE}:${IMAGE_TAG}
-                
-                            docker run --rm \
-                              -v /var/run/docker.sock:/var/run/docker.sock \
-                              -v "$WORKSPACE/trivy-cache:/root/.cache/" \
-                              -v "$WORKSPACE/trivy-reports:/reports" \
-                              aquasec/trivy:latest image \
-                              --severity HIGH,CRITICAL \
-                              --exit-code 0 \
-                              --no-progress \
-                              --format json \
-                              --output /reports/trivy-order-service.json \
-                              ${ORDER_IMAGE}:${IMAGE_TAG}
-                
-                            echo "Trivy reports generated:"
-                            ls -la trivy-reports
-                
-                            echo "Trivy image scan completed successfully"
-                        '''
-                     }
 }
 
 
