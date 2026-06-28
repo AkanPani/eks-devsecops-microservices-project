@@ -881,9 +881,6 @@ pipeline {
         PROMETHEUS_SERVICE_PORT = "9090"
         GRAFANA_SERVICE_PORT    = "80"
 
-        K8S_NAMESPACE = "gocartops-dev"
-        MONITORING_NAMESPACE = "monitoring"
-
     }
 
     stages {
