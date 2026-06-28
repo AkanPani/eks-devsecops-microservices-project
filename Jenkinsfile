@@ -506,6 +506,10 @@ pipeline {
         AWS_REGION     = "ap-south-1"
         AWS_ACCOUNT_ID = "548932260906"
 
+        ENV_NAME         = "dev"
+        EKS_CLUSTER_NAME = "gocartops-dev-eks"
+        ANSIBLE_DIR      = "ansible"
+
         ECR_REGISTRY = "${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com"
 
         PRODUCT_ECR_REPO = "gocartops-product-service"
@@ -896,6 +900,51 @@ pipeline {
 
                 echo "Terraform outputs:"
                 terraform output || true
+            '''
+                }
+            }
+        }
+        stage('Step 11 - Ansible Bootstrap') {
+            steps {
+                withAWS(credentials: 'aws-creds', region: "${AWS_REGION}") {
+                    sh '''
+                echo "Starting Ansible bootstrap..."
+
+                echo "Checking AWS identity..."
+                aws sts get-caller-identity
+
+                echo "Updating kubeconfig for EKS cluster..."
+                aws eks update-kubeconfig \
+                  --region "${AWS_REGION}" \
+                  --name "${EKS_CLUSTER_NAME}"
+
+                echo "Checking kubectl access..."
+                kubectl version --client
+                kubectl get nodes
+
+                echo "Checking Ansible..."
+                ansible --version
+
+                echo "Moving to Ansible directory..."
+                cd "${ANSIBLE_DIR}"
+
+                echo "Current Ansible directory:"
+                pwd
+                ls -la
+
+                echo "Checking bootstrap playbook..."
+                test -f ansible/playbooks/bootstrap-cluster.yml
+
+                echo "Running Ansible bootstrap playbook..."
+                ansible-playbook \
+                  -i localhost, \
+                  -c local \
+                  ansible/playbooks/bootstrap-cluster.yml \
+                  -e env="${ENV_NAME}" \
+                  -e aws_region="${AWS_REGION}" \
+                  -e cluster_name="${EKS_CLUSTER_NAME}"
+
+                echo "Ansible bootstrap completed successfully"
             '''
                 }
             }
