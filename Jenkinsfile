@@ -763,16 +763,16 @@ pipeline {
                         aws ecr describe-repositories \
                           --repository-names ${PRODUCT_ECR_REPO} \
                           --region ${AWS_REGION} >/dev/null 2>&1 || \
-                        aws ecr create-repository \
-                          --repository-name ${PRODUCT_ECR_REPO} \
-                          --region ${AWS_REGION}
+//                        aws ecr create-repository \
+//                          --repository-name ${PRODUCT_ECR_REPO} \
+//                          --region ${AWS_REGION}
 
                         aws ecr describe-repositories \
                           --repository-names ${ORDER_ECR_REPO} \
                           --region ${AWS_REGION} >/dev/null 2>&1 || \
-                        aws ecr create-repository \
-                          --repository-name ${ORDER_ECR_REPO} \
-                          --region ${AWS_REGION}
+//                        aws ecr create-repository \
+//                          --repository-name ${ORDER_ECR_REPO} \
+//                          --region ${AWS_REGION}
 
                         echo "Tagging product-service image for ECR..."
                         docker tag ${PRODUCT_IMAGE}:${IMAGE_TAG} ${ECR_REGISTRY}/${PRODUCT_ECR_REPO}:${IMAGE_TAG}
@@ -796,6 +796,46 @@ pipeline {
                         echo "${ECR_REGISTRY}/${PRODUCT_ECR_REPO}:${IMAGE_TAG}"
                         echo "${ECR_REGISTRY}/${ORDER_ECR_REPO}:${IMAGE_TAG}"
                     '''
+                }
+            }
+        }
+
+        stage('Step 8B - Import Existing ECR Repositories') {
+            steps {
+                withAWS(credentials: 'aws-creds', region: "${AWS_REGION}") {
+                    sh '''
+                echo "Starting ECR import into Terraform state..."
+
+                echo "Checking AWS identity..."
+                aws sts get-caller-identity
+
+                cd "${TERRAFORM_DIR}"
+
+                echo "Initializing Terraform..."
+                terraform init -reconfigure
+
+                echo "Checking current Terraform state..."
+                terraform state list || true
+
+                echo "Importing product-service ECR repo if not already imported..."
+                if terraform state list | grep 'module.ecr.aws_ecr_repository.this\\["gocartops-product-service"\\]'; then
+                  echo "Product ECR repo already exists in Terraform state"
+                else
+                  terraform import 'module.ecr.aws_ecr_repository.this["gocartops-product-service"]' gocartops-product-service
+                fi
+
+                echo "Importing order-service ECR repo if not already imported..."
+                if terraform state list | grep 'module.ecr.aws_ecr_repository.this\\["gocartops-order-service"\\]'; then
+                  echo "Order ECR repo already exists in Terraform state"
+                else
+                  terraform import 'module.ecr.aws_ecr_repository.this["gocartops-order-service"]' gocartops-order-service
+                fi
+
+                echo "ECR import completed successfully"
+
+                echo "Updated Terraform state:"
+                terraform state list | grep ecr || true
+            '''
                 }
             }
         }
