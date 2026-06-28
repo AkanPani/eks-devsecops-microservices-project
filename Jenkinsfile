@@ -511,6 +511,9 @@ pipeline {
 
         PRODUCT_ECR_REPO = "gocartops-product-service"
         ORDER_ECR_REPO   = "gocartops-order-service"
+
+        TERRAFORM_DIR = "terraform"
+        TF_PLAN_FILE  = "tfplan"
     }
 
     stages {
@@ -520,11 +523,11 @@ pipeline {
                 checkout scm
 
                 sh '''
-                echo "GitHub checkout successful"
-                pwd
-                ls -la
-                git log -1 --oneline
-            '''
+                    echo "GitHub checkout successful"
+                    pwd
+                    ls -la
+                    git log -1 --oneline
+                '''
             }
         }
 
@@ -532,10 +535,10 @@ pipeline {
             steps {
                 withSonarQubeEnv('SonarQube-Server') {
                     sh '''
-                    echo "Starting SonarQube scan..."
-                    ${SCANNER_HOME}/bin/sonar-scanner
-                    echo "SonarQube scan completed successfully"
-                '''
+                        echo "Starting SonarQube scan..."
+                        ${SCANNER_HOME}/bin/sonar-scanner
+                        echo "SonarQube scan completed successfully"
+                    '''
                 }
             }
         }
@@ -543,48 +546,48 @@ pipeline {
         stage('Step 4 - Docker Build') {
             steps {
                 sh '''
-                echo "Starting Docker build..."
+                    echo "Starting Docker build..."
 
-                echo "Checking Docker command..."
-                which docker
-                docker --version
+                    echo "Checking Docker command..."
+                    which docker
+                    docker --version
 
-                echo "Current workspace:"
-                pwd
-                ls -la
+                    echo "Current workspace:"
+                    pwd
+                    ls -la
 
-                echo "Checking services folder:"
-                ls -la services
+                    echo "Checking services folder:"
+                    ls -la services
 
-                echo "Checking product-service folder:"
-                ls -la "${PRODUCT_SERVICE_DIR}"
+                    echo "Checking product-service folder:"
+                    ls -la "${PRODUCT_SERVICE_DIR}"
 
-                echo "Checking order-service folder:"
-                ls -la "${ORDER_SERVICE_DIR}"
+                    echo "Checking order-service folder:"
+                    ls -la "${ORDER_SERVICE_DIR}"
 
-                echo "Checking Dockerfiles..."
-                test -f "${PRODUCT_SERVICE_DIR}/Dockerfile"
-                test -f "${ORDER_SERVICE_DIR}/Dockerfile"
+                    echo "Checking Dockerfiles..."
+                    test -f "${PRODUCT_SERVICE_DIR}/Dockerfile"
+                    test -f "${ORDER_SERVICE_DIR}/Dockerfile"
 
-                echo "Building product-service Docker image..."
-                docker build \
-                  -t ${PRODUCT_IMAGE}:${IMAGE_TAG} \
-                  -t ${PRODUCT_IMAGE}:latest \
-                  -f "${PRODUCT_SERVICE_DIR}/Dockerfile" \
-                  "${PRODUCT_SERVICE_DIR}"
+                    echo "Building product-service Docker image..."
+                    docker build \
+                      -t ${PRODUCT_IMAGE}:${IMAGE_TAG} \
+                      -t ${PRODUCT_IMAGE}:latest \
+                      -f "${PRODUCT_SERVICE_DIR}/Dockerfile" \
+                      "${PRODUCT_SERVICE_DIR}"
 
-                echo "Building order-service Docker image..."
-                docker build \
-                  -t ${ORDER_IMAGE}:${IMAGE_TAG} \
-                  -t ${ORDER_IMAGE}:latest \
-                  -f "${ORDER_SERVICE_DIR}/Dockerfile" \
-                  "${ORDER_SERVICE_DIR}"
+                    echo "Building order-service Docker image..."
+                    docker build \
+                      -t ${ORDER_IMAGE}:${IMAGE_TAG} \
+                      -t ${ORDER_IMAGE}:latest \
+                      -f "${ORDER_SERVICE_DIR}/Dockerfile" \
+                      "${ORDER_SERVICE_DIR}"
 
-                echo "Docker images created:"
-                docker images | grep gocartops || true
+                    echo "Docker images created:"
+                    docker images | grep gocartops || true
 
-                echo "Docker build completed successfully"
-            '''
+                    echo "Docker build completed successfully"
+                '''
             }
         }
 
@@ -598,68 +601,68 @@ pipeline {
         stage('Step 6 - Trivy Image Scan') {
             steps {
                 sh '''
-                echo "Starting Trivy image scan..."
+                    echo "Starting Trivy image scan..."
 
-                mkdir -p trivy-reports
+                    mkdir -p trivy-reports
 
-                echo "Checking Docker images before scan..."
-                docker images | grep gocartops || true
+                    echo "Checking Docker images before scan..."
+                    docker images | grep gocartops || true
 
-                echo "Scanning product-service image with Trivy..."
-                docker run --rm \
-                  -v /var/run/docker.sock:/var/run/docker.sock \
-                  -v "$WORKSPACE/trivy-cache:/root/.cache/" \
-                  -v "$WORKSPACE/trivy-reports:/reports" \
-                  aquasec/trivy:latest image \
-                  --severity HIGH,CRITICAL \
-                  --exit-code 0 \
-                  --no-progress \
-                  --format table \
-                  --output /reports/trivy-product-service.txt \
-                  ${PRODUCT_IMAGE}:${IMAGE_TAG}
+                    echo "Scanning product-service image with Trivy..."
+                    docker run --rm \
+                      -v /var/run/docker.sock:/var/run/docker.sock \
+                      -v "$WORKSPACE/trivy-cache:/root/.cache/" \
+                      -v "$WORKSPACE/trivy-reports:/reports" \
+                      aquasec/trivy:latest image \
+                      --severity HIGH,CRITICAL \
+                      --exit-code 0 \
+                      --no-progress \
+                      --format table \
+                      --output /reports/trivy-product-service.txt \
+                      ${PRODUCT_IMAGE}:${IMAGE_TAG}
 
-                docker run --rm \
-                  -v /var/run/docker.sock:/var/run/docker.sock \
-                  -v "$WORKSPACE/trivy-cache:/root/.cache/" \
-                  -v "$WORKSPACE/trivy-reports:/reports" \
-                  aquasec/trivy:latest image \
-                  --severity HIGH,CRITICAL \
-                  --exit-code 0 \
-                  --no-progress \
-                  --format json \
-                  --output /reports/trivy-product-service.json \
-                  ${PRODUCT_IMAGE}:${IMAGE_TAG}
+                    docker run --rm \
+                      -v /var/run/docker.sock:/var/run/docker.sock \
+                      -v "$WORKSPACE/trivy-cache:/root/.cache/" \
+                      -v "$WORKSPACE/trivy-reports:/reports" \
+                      aquasec/trivy:latest image \
+                      --severity HIGH,CRITICAL \
+                      --exit-code 0 \
+                      --no-progress \
+                      --format json \
+                      --output /reports/trivy-product-service.json \
+                      ${PRODUCT_IMAGE}:${IMAGE_TAG}
 
-                echo "Scanning order-service image with Trivy..."
-                docker run --rm \
-                  -v /var/run/docker.sock:/var/run/docker.sock \
-                  -v "$WORKSPACE/trivy-cache:/root/.cache/" \
-                  -v "$WORKSPACE/trivy-reports:/reports" \
-                  aquasec/trivy:latest image \
-                  --severity HIGH,CRITICAL \
-                  --exit-code 0 \
-                  --no-progress \
-                  --format table \
-                  --output /reports/trivy-order-service.txt \
-                  ${ORDER_IMAGE}:${IMAGE_TAG}
+                    echo "Scanning order-service image with Trivy..."
+                    docker run --rm \
+                      -v /var/run/docker.sock:/var/run/docker.sock \
+                      -v "$WORKSPACE/trivy-cache:/root/.cache/" \
+                      -v "$WORKSPACE/trivy-reports:/reports" \
+                      aquasec/trivy:latest image \
+                      --severity HIGH,CRITICAL \
+                      --exit-code 0 \
+                      --no-progress \
+                      --format table \
+                      --output /reports/trivy-order-service.txt \
+                      ${ORDER_IMAGE}:${IMAGE_TAG}
 
-                docker run --rm \
-                  -v /var/run/docker.sock:/var/run/docker.sock \
-                  -v "$WORKSPACE/trivy-cache:/root/.cache/" \
-                  -v "$WORKSPACE/trivy-reports:/reports" \
-                  aquasec/trivy:latest image \
-                  --severity HIGH,CRITICAL \
-                  --exit-code 0 \
-                  --no-progress \
-                  --format json \
-                  --output /reports/trivy-order-service.json \
-                  ${ORDER_IMAGE}:${IMAGE_TAG}
+                    docker run --rm \
+                      -v /var/run/docker.sock:/var/run/docker.sock \
+                      -v "$WORKSPACE/trivy-cache:/root/.cache/" \
+                      -v "$WORKSPACE/trivy-reports:/reports" \
+                      aquasec/trivy:latest image \
+                      --severity HIGH,CRITICAL \
+                      --exit-code 0 \
+                      --no-progress \
+                      --format json \
+                      --output /reports/trivy-order-service.json \
+                      ${ORDER_IMAGE}:${IMAGE_TAG}
 
-                echo "Trivy reports generated:"
-                ls -la trivy-reports
+                    echo "Trivy reports generated:"
+                    ls -la trivy-reports
 
-                echo "Trivy image scan completed successfully"
-            '''
+                    echo "Trivy image scan completed successfully"
+                '''
             }
         }
 
@@ -667,61 +670,101 @@ pipeline {
             steps {
                 withAWS(credentials: 'aws-creds', region: "${AWS_REGION}") {
                     sh '''
-                    echo "Starting Docker push to ECR..."
+                        echo "Starting Docker push to ECR..."
 
-                    echo "Checking AWS CLI..."
-                    aws --version
+                        echo "Checking AWS CLI..."
+                        aws --version
 
-                    echo "Checking AWS identity..."
-                    aws sts get-caller-identity
+                        echo "Checking AWS identity..."
+                        aws sts get-caller-identity
 
-                    echo "Logging in to Amazon ECR..."
-                    aws ecr get-login-password --region ${AWS_REGION} | \
-                    docker login --username AWS --password-stdin ${ECR_REGISTRY}
+                        echo "Logging in to Amazon ECR..."
+                        aws ecr get-login-password --region ${AWS_REGION} | \
+                        docker login --username AWS --password-stdin ${ECR_REGISTRY}
 
-                    echo "Creating ECR repositories if they do not exist..."
+                        echo "Creating ECR repositories if they do not exist..."
 
-                    aws ecr describe-repositories \
-                      --repository-names ${PRODUCT_ECR_REPO} \
-                      --region ${AWS_REGION} >/dev/null 2>&1 || \
-                    aws ecr create-repository \
-                      --repository-name ${PRODUCT_ECR_REPO} \
-                      --region ${AWS_REGION}
+                        aws ecr describe-repositories \
+                          --repository-names ${PRODUCT_ECR_REPO} \
+                          --region ${AWS_REGION} >/dev/null 2>&1 || \
+                        aws ecr create-repository \
+                          --repository-name ${PRODUCT_ECR_REPO} \
+                          --region ${AWS_REGION}
 
-                    aws ecr describe-repositories \
-                      --repository-names ${ORDER_ECR_REPO} \
-                      --region ${AWS_REGION} >/dev/null 2>&1 || \
-                    aws ecr create-repository \
-                      --repository-name ${ORDER_ECR_REPO} \
-                      --region ${AWS_REGION}
+                        aws ecr describe-repositories \
+                          --repository-names ${ORDER_ECR_REPO} \
+                          --region ${AWS_REGION} >/dev/null 2>&1 || \
+                        aws ecr create-repository \
+                          --repository-name ${ORDER_ECR_REPO} \
+                          --region ${AWS_REGION}
 
-                    echo "Tagging product-service image for ECR..."
-                    docker tag ${PRODUCT_IMAGE}:${IMAGE_TAG} ${ECR_REGISTRY}/${PRODUCT_ECR_REPO}:${IMAGE_TAG}
-                    docker tag ${PRODUCT_IMAGE}:latest ${ECR_REGISTRY}/${PRODUCT_ECR_REPO}:latest
+                        echo "Tagging product-service image for ECR..."
+                        docker tag ${PRODUCT_IMAGE}:${IMAGE_TAG} ${ECR_REGISTRY}/${PRODUCT_ECR_REPO}:${IMAGE_TAG}
+                        docker tag ${PRODUCT_IMAGE}:latest ${ECR_REGISTRY}/${PRODUCT_ECR_REPO}:latest
 
-                    echo "Tagging order-service image for ECR..."
-                    docker tag ${ORDER_IMAGE}:${IMAGE_TAG} ${ECR_REGISTRY}/${ORDER_ECR_REPO}:${IMAGE_TAG}
-                    docker tag ${ORDER_IMAGE}:latest ${ECR_REGISTRY}/${ORDER_ECR_REPO}:latest
+                        echo "Tagging order-service image for ECR..."
+                        docker tag ${ORDER_IMAGE}:${IMAGE_TAG} ${ECR_REGISTRY}/${ORDER_ECR_REPO}:${IMAGE_TAG}
+                        docker tag ${ORDER_IMAGE}:latest ${ECR_REGISTRY}/${ORDER_ECR_REPO}:latest
 
-                    echo "Pushing product-service image to ECR..."
-                    docker push ${ECR_REGISTRY}/${PRODUCT_ECR_REPO}:${IMAGE_TAG}
-                    docker push ${ECR_REGISTRY}/${PRODUCT_ECR_REPO}:latest
+                        echo "Pushing product-service image to ECR..."
+                        docker push ${ECR_REGISTRY}/${PRODUCT_ECR_REPO}:${IMAGE_TAG}
+                        docker push ${ECR_REGISTRY}/${PRODUCT_ECR_REPO}:latest
 
-                    echo "Pushing order-service image to ECR..."
-                    docker push ${ECR_REGISTRY}/${ORDER_ECR_REPO}:${IMAGE_TAG}
-                    docker push ${ECR_REGISTRY}/${ORDER_ECR_REPO}:latest
+                        echo "Pushing order-service image to ECR..."
+                        docker push ${ECR_REGISTRY}/${ORDER_ECR_REPO}:${IMAGE_TAG}
+                        docker push ${ECR_REGISTRY}/${ORDER_ECR_REPO}:latest
 
-                    echo "Docker push to ECR completed successfully"
+                        echo "Docker push to ECR completed successfully"
 
-                    echo "Final ECR images:"
-                    echo "${ECR_REGISTRY}/${PRODUCT_ECR_REPO}:${IMAGE_TAG}"
-                    echo "${ECR_REGISTRY}/${ORDER_ECR_REPO}:${IMAGE_TAG}"
-                '''
+                        echo "Final ECR images:"
+                        echo "${ECR_REGISTRY}/${PRODUCT_ECR_REPO}:${IMAGE_TAG}"
+                        echo "${ECR_REGISTRY}/${ORDER_ECR_REPO}:${IMAGE_TAG}"
+                    '''
+                }
+            }
+        }
+
+        stage('Step 8 - Terraform Init / Validate / Plan') {
+            steps {
+                withAWS(credentials: 'aws-creds', region: "${AWS_REGION}") {
+                    sh '''
+                        echo "Starting Terraform init / validate / plan..."
+
+                        echo "Checking Terraform command..."
+                        terraform version
+
+                        echo "Checking AWS identity..."
+                        aws sts get-caller-identity
+
+                        echo "Moving to Terraform directory..."
+                        cd "${TERRAFORM_DIR}"
+
+                        echo "Current Terraform directory:"
+                        pwd
+                        ls -la
+
+                        echo "Terraform init..."
+                        terraform init -reconfigure
+
+                        echo "Terraform format check..."
+                        terraform fmt -check -recursive
+
+                        echo "Terraform validate..."
+                        terraform validate
+
+                        echo "Terraform plan..."
+                        terraform plan \
+                          -out="${TF_PLAN_FILE}" \
+                          -var="aws_region=${AWS_REGION}" \
+                          -var="product_image=${ECR_REGISTRY}/${PRODUCT_ECR_REPO}:${IMAGE_TAG}" \
+                          -var="order_image=${ECR_REGISTRY}/${ORDER_ECR_REPO}:${IMAGE_TAG}"
+
+                        echo "Terraform plan completed successfully"
+                        ls -la
+                    '''
                 }
             }
         }
     }
-
-
 }
 
