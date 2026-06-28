@@ -869,6 +869,17 @@ pipeline {
 
         PRODUCT_LOCAL_PORT = "18081"
         ORDER_LOCAL_PORT   = "18082"
+
+        MONITORING_NAMESPACE = "monitoring"
+
+        PROMETHEUS_SERVICE = "kube-prometheus-stack-prometheus"
+        GRAFANA_SERVICE    = "kube-prometheus-stack-grafana"
+
+        PROMETHEUS_LOCAL_PORT = "19090"
+        GRAFANA_LOCAL_PORT    = "13000"
+
+        PROMETHEUS_SERVICE_PORT = "9090"
+        GRAFANA_SERVICE_PORT    = "80"
     }
 
     stages {
@@ -1471,6 +1482,103 @@ pipeline {
                 ls -la "${ZAP_REPORT_DIR}"
 
                 echo "OWASP ZAP scan completed successfully"
+            '''
+                }
+            }
+        }
+
+        stage('Step 14 - Prometheus/Grafana Health Check') {
+            steps {
+                withAWS(credentials: 'aws-creds', region: "${AWS_REGION}") {
+                    sh '''
+                echo "Starting Prometheus/Grafana health check..."
+
+                echo "Updating kubeconfig for EKS cluster..."
+                aws eks update-kubeconfig \
+                  --region "${AWS_REGION}" \
+                  --name "${EKS_CLUSTER_NAME}"
+
+                echo "Checking cluster nodes..."
+                kubectl get nodes
+
+                echo "Checking application namespace..."
+                kubectl get ns "${K8S_NAMESPACE}"
+
+                echo "Checking application pods..."
+                kubectl get pods -n "${K8S_NAMESPACE}" -o wide
+
+                echo "Checking application services..."
+                kubectl get svc -n "${K8S_NAMESPACE}"
+
+                echo "Waiting for product-service rollout..."
+                kubectl rollout status deployment/product-service \
+                  -n "${K8S_NAMESPACE}" \
+                  --timeout=5m
+
+                echo "Waiting for order-service rollout..."
+                kubectl rollout status deployment/order-service \
+                  -n "${K8S_NAMESPACE}" \
+                  --timeout=5m
+
+                echo "Checking product-service endpoints..."
+                kubectl get endpoints product-service -n "${K8S_NAMESPACE}" || true
+
+                echo "Checking order-service endpoints..."
+                kubectl get endpoints order-service -n "${K8S_NAMESPACE}" || true
+
+                echo "Checking monitoring namespace..."
+                kubectl get ns "${MONITORING_NAMESPACE}"
+
+                echo "Checking Prometheus/Grafana pods..."
+                kubectl get pods -n "${MONITORING_NAMESPACE}" -o wide
+
+                echo "Checking monitoring services..."
+                kubectl get svc -n "${MONITORING_NAMESPACE}"
+
+                echo "Checking Prometheus service..."
+                kubectl get svc "${PROMETHEUS_SERVICE}" -n "${MONITORING_NAMESPACE}"
+
+                echo "Checking Grafana service..."
+                kubectl get svc "${GRAFANA_SERVICE}" -n "${MONITORING_NAMESPACE}"
+
+                echo "Starting Prometheus port-forward..."
+                kubectl port-forward \
+                  -n "${MONITORING_NAMESPACE}" \
+                  svc/${PROMETHEUS_SERVICE} \
+                  "${PROMETHEUS_LOCAL_PORT}:${PROMETHEUS_SERVICE_PORT}" \
+                  --address 0.0.0.0 > prometheus-port-forward.log 2>&1 &
+
+                PROM_PID=$!
+
+                echo "Starting Grafana port-forward..."
+                kubectl port-forward \
+                  -n "${MONITORING_NAMESPACE}" \
+                  svc/${GRAFANA_SERVICE} \
+                  "${GRAFANA_LOCAL_PORT}:${GRAFANA_SERVICE_PORT}" \
+                  --address 0.0.0.0 > grafana-port-forward.log 2>&1 &
+
+                GRAFANA_PID=$!
+
+                echo "Waiting for port-forward to become ready..."
+                sleep 15
+
+                echo "Checking Prometheus health endpoint..."
+                curl -f "http://localhost:${PROMETHEUS_LOCAL_PORT}/-/healthy"
+
+                echo "Checking Prometheus readiness endpoint..."
+                curl -f "http://localhost:${PROMETHEUS_LOCAL_PORT}/-/ready"
+
+                echo "Checking Grafana login page..."
+                curl -I "http://localhost:${GRAFANA_LOCAL_PORT}/login"
+
+                echo "Checking Prometheus targets page availability..."
+                curl -I "http://localhost:${PROMETHEUS_LOCAL_PORT}/targets"
+
+                echo "Stopping port-forward processes..."
+                kill ${PROM_PID} || true
+                kill ${GRAFANA_PID} || true
+
+                echo "Prometheus/Grafana health check completed successfully"
             '''
                 }
             }
