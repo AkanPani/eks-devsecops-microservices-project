@@ -504,6 +504,13 @@ pipeline {
         PRODUCT_SERVICE_DIR = "services/product-service"
         ORDER_SERVICE_DIR   = "services/order-service"
 
+        AWS_REGION     = "ap-south-1"
+        AWS_ACCOUNT_ID = "123456789012"
+
+        ECR_REGISTRY = "${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com"
+
+        PRODUCT_ECR_REPO = "gocartops-product-service"
+        ORDER_ECR_REPO   = "gocartops-order-service"
     }
 
     stages {
@@ -657,4 +664,60 @@ pipeline {
     }
 }
 
-
+            stage('Step 7 - Docker Push to ECR') {
+                steps {
+                    withAWS(credentials: 'aws-creds', region: "${AWS_REGION}") {
+                        sh '''
+                            echo "Starting Docker push to ECR..."
+            
+                            echo "Checking AWS CLI..."
+                            aws --version
+            
+                            echo "Checking AWS identity..."
+                            aws sts get-caller-identity
+            
+                            echo "Logging in to Amazon ECR..."
+                            aws ecr get-login-password --region ${AWS_REGION} | \
+                            docker login --username AWS --password-stdin ${ECR_REGISTRY}
+            
+                            echo "Creating ECR repositories if they do not exist..."
+            
+                            aws ecr describe-repositories \
+                              --repository-names ${PRODUCT_ECR_REPO} \
+                              --region ${AWS_REGION} >/dev/null 2>&1 || \
+                            aws ecr create-repository \
+                              --repository-name ${PRODUCT_ECR_REPO} \
+                              --region ${AWS_REGION}
+            
+                            aws ecr describe-repositories \
+                              --repository-names ${ORDER_ECR_REPO} \
+                              --region ${AWS_REGION} >/dev/null 2>&1 || \
+                            aws ecr create-repository \
+                              --repository-name ${ORDER_ECR_REPO} \
+                              --region ${AWS_REGION}
+            
+                            echo "Tagging product-service image for ECR..."
+                            docker tag ${PRODUCT_IMAGE}:${IMAGE_TAG} ${ECR_REGISTRY}/${PRODUCT_ECR_REPO}:${IMAGE_TAG}
+                            docker tag ${PRODUCT_IMAGE}:latest ${ECR_REGISTRY}/${PRODUCT_ECR_REPO}:latest
+            
+                            echo "Tagging order-service image for ECR..."
+                            docker tag ${ORDER_IMAGE}:${IMAGE_TAG} ${ECR_REGISTRY}/${ORDER_ECR_REPO}:${IMAGE_TAG}
+                            docker tag ${ORDER_IMAGE}:latest ${ECR_REGISTRY}/${ORDER_ECR_REPO}:latest
+            
+                            echo "Pushing product-service image to ECR..."
+                            docker push ${ECR_REGISTRY}/${PRODUCT_ECR_REPO}:${IMAGE_TAG}
+                            docker push ${ECR_REGISTRY}/${PRODUCT_ECR_REPO}:latest
+            
+                            echo "Pushing order-service image to ECR..."
+                            docker push ${ECR_REGISTRY}/${ORDER_ECR_REPO}:${IMAGE_TAG}
+                            docker push ${ECR_REGISTRY}/${ORDER_ECR_REPO}:latest
+            
+                            echo "Docker push to ECR completed successfully"
+            
+                            echo "Final ECR images:"
+                            echo "${ECR_REGISTRY}/${PRODUCT_ECR_REPO}:${IMAGE_TAG}"
+                            echo "${ECR_REGISTRY}/${ORDER_ECR_REPO}:${IMAGE_TAG}"
+                        '''
+        }
+    }
+}

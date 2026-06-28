@@ -13,7 +13,7 @@ enable_nat_gateway = true
 single_nat_gateway = true
 
 # ECR
-ecr_repository_names     = ["product-service", "order-service"]
+ecr_repository_names     = ["gocartops-product-service", "gocartops-order-service"]
 ecr_image_tag_mutability = "MUTABLE"
 
 # EKS
