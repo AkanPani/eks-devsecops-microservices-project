@@ -308,187 +308,525 @@
 
 ////////////////////////////////////////////////////////////
 
+
+///////////////////////////////////////////////////////////////////////
+
 //pipeline {
 //    agent any
 //
-//    tools {
-//        go 'Go-1.22'
-//    }
-//
 //    environment {
-//        PRODUCT_SERVICE_DIR = 'product-service'
-//        ORDER_SERVICE_DIR   = 'order-service'
-//        BUILD_DIR           = 'build-artifacts'
-//    }
+//        SCANNER_HOME = tool 'SonarScanner'
 //
-//    options {
-//        timestamps()
-//        ansiColor('xterm')
-//        skipDefaultCheckout(false)
+//        PRODUCT_IMAGE = "gocartops-product-service"
+//        ORDER_IMAGE   = "gocartops-order-service"
+//        IMAGE_TAG     = "${BUILD_NUMBER}"
+//
+//        PRODUCT_SERVICE_DIR = "services/product-service"
+//        ORDER_SERVICE_DIR   = "services/order-service"
+//
+//        AWS_REGION     = "ap-south-1"
+//        AWS_ACCOUNT_ID = "548932260906"
+//
+//        ENV_NAME         = "dev"
+//        EKS_CLUSTER_NAME = "gocartops-dev-eks"
+//        ANSIBLE_DIR      = "ansible"
+//
+//        ECR_REGISTRY = "${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com"
+//
+//        PRODUCT_ECR_REPO = "gocartops-product-service"
+//        ORDER_ECR_REPO   = "gocartops-order-service"
+//
+//        TERRAFORM_DIR = "terraform"
+//        TF_PLAN_FILE  = "tfplan"
 //    }
 //
 //    stages {
 //
-//        stage('Checkout Source Code') {
+//        stage('Step 2 - GitHub Checkout Only') {
 //            steps {
-//                echo 'Checking out source code from GitHub...'
 //                checkout scm
+//
+//                sh '''
+//                    echo "GitHub checkout successful"
+//                    pwd
+//                    ls -la
+//                    git log -1 --oneline
+//                '''
 //            }
 //        }
 //
-//        stage('Validate Repository Structure') {
+//        stage('Step 3 - SonarQube Scan') {
 //            steps {
-//                echo 'Validating required folders and files...'
+//                withSonarQubeEnv('SonarQube-Server') {
+//                    sh '''
+//                        echo "Starting SonarQube scan..."
+//                        ${SCANNER_HOME}/bin/sonar-scanner
+//                        echo "SonarQube scan completed successfully"
+//                    '''
+//                }
+//            }
+//        }
 //
+//        stage('Step 4 - Docker Build') {
+//            steps {
 //                sh '''
+//                    echo "Starting Docker build..."
+//
+//                    echo "Checking Docker command..."
+//                    which docker
+//                    docker --version
+//
 //                    echo "Current workspace:"
 //                    pwd
-//
-//                    echo "Repository files:"
 //                    ls -la
 //
-//                    if [ ! -d "$PRODUCT_SERVICE_DIR" ]; then
-//                      echo "ERROR: product-service folder not found"
-//                      exit 1
-//                    fi
+//                    echo "Checking services folder:"
+//                    ls -la services
 //
-//                    if [ ! -d "$ORDER_SERVICE_DIR" ]; then
-//                      echo "ERROR: order-service folder not found"
-//                      exit 1
-//                    fi
+//                    echo "Checking product-service folder:"
+//                    ls -la "${PRODUCT_SERVICE_DIR}"
 //
-//                    if [ ! -f "$PRODUCT_SERVICE_DIR/go.mod" ]; then
-//                      echo "ERROR: product-service/go.mod not found"
-//                      exit 1
-//                    fi
+//                    echo "Checking order-service folder:"
+//                    ls -la "${ORDER_SERVICE_DIR}"
 //
-//                    if [ ! -f "$ORDER_SERVICE_DIR/go.mod" ]; then
-//                      echo "ERROR: order-service/go.mod not found"
-//                      exit 1
-//                    fi
+//                    echo "Checking Dockerfiles..."
+//                    test -f "${PRODUCT_SERVICE_DIR}/Dockerfile"
+//                    test -f "${ORDER_SERVICE_DIR}/Dockerfile"
 //
-//                    echo "Repository structure validation completed successfully."
+//                    echo "Building product-service Docker image..."
+//                    docker build \
+//                      -t ${PRODUCT_IMAGE}:${IMAGE_TAG} \
+//                      -t ${PRODUCT_IMAGE}:latest \
+//                      -f "${PRODUCT_SERVICE_DIR}/Dockerfile" \
+//                      "${PRODUCT_SERVICE_DIR}"
+//
+//                    echo "Building order-service Docker image..."
+//                    docker build \
+//                      -t ${ORDER_IMAGE}:${IMAGE_TAG} \
+//                      -t ${ORDER_IMAGE}:latest \
+//                      -f "${ORDER_SERVICE_DIR}/Dockerfile" \
+//                      "${ORDER_SERVICE_DIR}"
+//
+//                    echo "Docker images created:"
+//                    docker images | grep gocartops || true
+//
+//                    echo "Docker build completed successfully"
 //                '''
 //            }
 //        }
 //
-//        stage('Go Version Check') {
+//        stage('Step 5 - Twistlock Image Scan') {
 //            steps {
-//                echo 'Checking Go version installed in Jenkins...'
+//                echo "Skipping Twistlock scan for local practice: Twistlock Console is not available."
+//                echo "In real projects, this stage uses twistcli with Twistlock Console URL and credentials."
+//            }
+//        }
 //
+//        stage('Step 6 - Trivy Image Scan') {
+//            steps {
 //                sh '''
-//                    go version
-//                    go env GOPATH
-//                    go env GOMODCACHE
+//                    echo "Starting Trivy image scan..."
+//
+//                    mkdir -p trivy-reports
+//
+//                    echo "Checking Docker images before scan..."
+//                    docker images | grep gocartops || true
+//
+//                    echo "Scanning product-service image with Trivy..."
+//                    docker run --rm \
+//                      -v /var/run/docker.sock:/var/run/docker.sock \
+//                      -v "$WORKSPACE/trivy-cache:/root/.cache/" \
+//                      -v "$WORKSPACE/trivy-reports:/reports" \
+//                      aquasec/trivy:latest image \
+//                      --severity HIGH,CRITICAL \
+//                      --exit-code 0 \
+//                      --no-progress \
+//                      --format table \
+//                      --output /reports/trivy-product-service.txt \
+//                      ${PRODUCT_IMAGE}:${IMAGE_TAG}
+//
+//                    docker run --rm \
+//                      -v /var/run/docker.sock:/var/run/docker.sock \
+//                      -v "$WORKSPACE/trivy-cache:/root/.cache/" \
+//                      -v "$WORKSPACE/trivy-reports:/reports" \
+//                      aquasec/trivy:latest image \
+//                      --severity HIGH,CRITICAL \
+//                      --exit-code 0 \
+//                      --no-progress \
+//                      --format json \
+//                      --output /reports/trivy-product-service.json \
+//                      ${PRODUCT_IMAGE}:${IMAGE_TAG}
+//
+//                    echo "Scanning order-service image with Trivy..."
+//                    docker run --rm \
+//                      -v /var/run/docker.sock:/var/run/docker.sock \
+//                      -v "$WORKSPACE/trivy-cache:/root/.cache/" \
+//                      -v "$WORKSPACE/trivy-reports:/reports" \
+//                      aquasec/trivy:latest image \
+//                      --severity HIGH,CRITICAL \
+//                      --exit-code 0 \
+//                      --no-progress \
+//                      --format table \
+//                      --output /reports/trivy-order-service.txt \
+//                      ${ORDER_IMAGE}:${IMAGE_TAG}
+//
+//                    docker run --rm \
+//                      -v /var/run/docker.sock:/var/run/docker.sock \
+//                      -v "$WORKSPACE/trivy-cache:/root/.cache/" \
+//                      -v "$WORKSPACE/trivy-reports:/reports" \
+//                      aquasec/trivy:latest image \
+//                      --severity HIGH,CRITICAL \
+//                      --exit-code 0 \
+//                      --no-progress \
+//                      --format json \
+//                      --output /reports/trivy-order-service.json \
+//                      ${ORDER_IMAGE}:${IMAGE_TAG}
+//
+//                    echo "Trivy reports generated:"
+//                    ls -la trivy-reports
+//
+//                    echo "Trivy image scan completed successfully"
 //                '''
 //            }
 //        }
-//
-//        stage('Download Dependencies') {
-//            parallel {
-//                stage('Product Service Dependencies') {
-//                    steps {
-//                        dir("${PRODUCT_SERVICE_DIR}") {
-//                            sh '''
-//                                echo "Downloading product-service dependencies..."
-//                                go mod download
-//                                go mod tidy
-//                            '''
-//                        }
-//                    }
-//                }
-//
-//                stage('Order Service Dependencies') {
-//                    steps {
-//                        dir("${ORDER_SERVICE_DIR}") {
-//                            sh '''
-//                                echo "Downloading order-service dependencies..."
-//                                go mod download
-//                                go mod tidy
-//                            '''
-//                        }
-//                    }
-//                }
-//            }
-//        }
-//
-//        stage('Run Unit Tests') {
-//            parallel {
-//                stage('Product Service Tests') {
-//                    steps {
-//                        dir("${PRODUCT_SERVICE_DIR}") {
-//                            sh '''
-//                                echo "Running product-service tests..."
-//                                go test ./... -v
-//                            '''
-//                        }
-//                    }
-//                }
-//
-//                stage('Order Service Tests') {
-//                    steps {
-//                        dir("${ORDER_SERVICE_DIR}") {
-//                            sh '''
-//                                echo "Running order-service tests..."
-//                                go test ./... -v
-//                            '''
-//                        }
-//                    }
-//                }
-//            }
-//        }
-//
-//        stage('Build Go Services') {
+//        stage('Step 8A - Terraform Backend Bootstrap') {
 //            steps {
-//                echo 'Building Go services...'
+//                withAWS(credentials: 'aws-creds', region: "${AWS_REGION}") {
+//                    sh '''
+//                echo "Starting Terraform backend bootstrap..."
 //
+//                BACKEND_BUCKET="gocartops-dev-tfstate-${AWS_ACCOUNT_ID}-${AWS_REGION}"
+//                LOCK_TABLE="gocartops-dev-tf-locks"
+//
+//                echo "Backend bucket: ${BACKEND_BUCKET}"
+//                echo "Lock table: ${LOCK_TABLE}"
+//
+//                echo "Checking AWS identity..."
+//                aws sts get-caller-identity
+//
+//                echo "Checking if S3 backend bucket exists..."
+//                if aws s3api head-bucket --bucket "${BACKEND_BUCKET}" 2>/dev/null; then
+//                  echo "S3 backend bucket already exists: ${BACKEND_BUCKET}"
+//                else
+//                  echo "Creating S3 backend bucket: ${BACKEND_BUCKET}"
+//
+//                  aws s3api create-bucket \
+//                    --bucket "${BACKEND_BUCKET}" \
+//                    --region "${AWS_REGION}" \
+//                    --create-bucket-configuration LocationConstraint="${AWS_REGION}"
+//
+//                  echo "Enabling versioning on backend bucket..."
+//                  aws s3api put-bucket-versioning \
+//                    --bucket "${BACKEND_BUCKET}" \
+//                    --versioning-configuration Status=Enabled
+//
+//                  echo "Enabling default encryption on backend bucket..."
+//                  aws s3api put-bucket-encryption \
+//                    --bucket "${BACKEND_BUCKET}" \
+//                    --server-side-encryption-configuration '{
+//                      "Rules": [
+//                        {
+//                          "ApplyServerSideEncryptionByDefault": {
+//                            "SSEAlgorithm": "AES256"
+//                          }
+//                        }
+//                      ]
+//                    }'
+//
+//                  echo "Blocking public access on backend bucket..."
+//                  aws s3api put-public-access-block \
+//                    --bucket "${BACKEND_BUCKET}" \
+//                    --public-access-block-configuration BlockPublicAcls=true,IgnorePublicAcls=true,BlockPublicPolicy=true,RestrictPublicBuckets=true
+//                fi
+//
+//                echo "Checking if DynamoDB lock table exists..."
+//                if aws dynamodb describe-table --table-name "${LOCK_TABLE}" --region "${AWS_REGION}" >/dev/null 2>&1; then
+//                  echo "DynamoDB lock table already exists: ${LOCK_TABLE}"
+//                else
+//                  echo "Creating DynamoDB lock table: ${LOCK_TABLE}"
+//
+//                  aws dynamodb create-table \
+//                    --table-name "${LOCK_TABLE}" \
+//                    --attribute-definitions AttributeName=LockID,AttributeType=S \
+//                    --key-schema AttributeName=LockID,KeyType=HASH \
+//                    --billing-mode PAY_PER_REQUEST \
+//                    --region "${AWS_REGION}"
+//
+//                  echo "Waiting for DynamoDB lock table to become active..."
+//                  aws dynamodb wait table-exists \
+//                    --table-name "${LOCK_TABLE}" \
+//                    --region "${AWS_REGION}"
+//                fi
+//
+//                echo "Terraform backend bootstrap completed successfully"
+//            '''
+//                }
+//            }
+//        }
+//        stage('Step 7 - Docker Push to ECR') {
+//            steps {
+//                withAWS(credentials: 'aws-creds', region: "${AWS_REGION}") {
+//                    sh '''
+//                        echo "Starting Docker push to ECR..."
+//
+//                        echo "Checking AWS CLI..."
+//                        aws --version
+//
+//                        echo "Checking AWS identity..."
+//                        aws sts get-caller-identity
+//
+//                        echo "Logging in to Amazon ECR..."
+//                        aws ecr get-login-password --region ${AWS_REGION} | \
+//                        docker login --username AWS --password-stdin ${ECR_REGISTRY}
+//
+//                        echo "Creating ECR repositories if they do not exist..."
+//
+//                        aws ecr describe-repositories \
+//                          --repository-names ${PRODUCT_ECR_REPO} \
+//                          --region ${AWS_REGION} >/dev/null 2>&1 || \
+////                        aws ecr create-repository \
+////                          --repository-name ${PRODUCT_ECR_REPO} \
+////                          --region ${AWS_REGION}
+//
+//                        aws ecr describe-repositories \
+//                          --repository-names ${ORDER_ECR_REPO} \
+//                          --region ${AWS_REGION} >/dev/null 2>&1 || \
+////                        aws ecr create-repository \
+////                          --repository-name ${ORDER_ECR_REPO} \
+////                          --region ${AWS_REGION}
+//
+//                        echo "Tagging product-service image for ECR..."
+//                        docker tag ${PRODUCT_IMAGE}:${IMAGE_TAG} ${ECR_REGISTRY}/${PRODUCT_ECR_REPO}:${IMAGE_TAG}
+//                        docker tag ${PRODUCT_IMAGE}:latest ${ECR_REGISTRY}/${PRODUCT_ECR_REPO}:latest
+//
+//                        echo "Tagging order-service image for ECR..."
+//                        docker tag ${ORDER_IMAGE}:${IMAGE_TAG} ${ECR_REGISTRY}/${ORDER_ECR_REPO}:${IMAGE_TAG}
+//                        docker tag ${ORDER_IMAGE}:latest ${ECR_REGISTRY}/${ORDER_ECR_REPO}:latest
+//
+//                        echo "Pushing product-service image to ECR..."
+//                        docker push ${ECR_REGISTRY}/${PRODUCT_ECR_REPO}:${IMAGE_TAG}
+//                        docker push ${ECR_REGISTRY}/${PRODUCT_ECR_REPO}:latest
+//
+//                        echo "Pushing order-service image to ECR..."
+//                        docker push ${ECR_REGISTRY}/${ORDER_ECR_REPO}:${IMAGE_TAG}
+//                        docker push ${ECR_REGISTRY}/${ORDER_ECR_REPO}:latest
+//
+//                        echo "Docker push to ECR completed successfully"
+//
+//                        echo "Final ECR images:"
+//                        echo "${ECR_REGISTRY}/${PRODUCT_ECR_REPO}:${IMAGE_TAG}"
+//                        echo "${ECR_REGISTRY}/${ORDER_ECR_REPO}:${IMAGE_TAG}"
+//                    '''
+//                }
+//            }
+//        }
+//
+//        stage('Step 8B - Import Existing ECR Repositories') {
+//            steps {
+//                withAWS(credentials: 'aws-creds', region: "${AWS_REGION}") {
+//                    sh '''
+//                echo "Starting ECR import into Terraform state..."
+//
+//                echo "Checking AWS identity..."
+//                aws sts get-caller-identity
+//
+//                cd "${TERRAFORM_DIR}"
+//
+//                echo "Initializing Terraform..."
+//                terraform init -reconfigure
+//
+//                echo "Checking current Terraform state..."
+//                terraform state list || true
+//
+//                echo "Importing product-service ECR repo if not already imported..."
+//                if terraform state list | grep 'module.ecr.aws_ecr_repository.this\\["gocartops-product-service"\\]'; then
+//                  echo "Product ECR repo already exists in Terraform state"
+//                else
+//                  terraform import 'module.ecr.aws_ecr_repository.this["gocartops-product-service"]' gocartops-product-service
+//                fi
+//
+//                echo "Importing order-service ECR repo if not already imported..."
+//                if terraform state list | grep 'module.ecr.aws_ecr_repository.this\\["gocartops-order-service"\\]'; then
+//                  echo "Order ECR repo already exists in Terraform state"
+//                else
+//                  terraform import 'module.ecr.aws_ecr_repository.this["gocartops-order-service"]' gocartops-order-service
+//                fi
+//
+//                echo "ECR import completed successfully"
+//
+//                echo "Updated Terraform state:"
+//                terraform state list | grep ecr || true
+//            '''
+//                }
+//            }
+//        }
+//
+//        stage('Step 8 - Terraform Init / Validate / Plan') {
+//            steps {
+//                withAWS(credentials: 'aws-creds', region: "${AWS_REGION}") {
+//                    sh '''
+//                        echo "Starting Terraform init / validate / plan..."
+//
+//                        echo "Checking Terraform command..."
+//                        terraform version
+//
+//                        echo "Checking AWS identity..."
+//                        aws sts get-caller-identity
+//
+//                        echo "Moving to Terraform directory..."
+//                        cd "${TERRAFORM_DIR}"
+//
+//                        echo "Current Terraform directory:"
+//                        pwd
+//                        ls -la
+//
+//                        echo "Terraform init..."
+//                        terraform init -reconfigure
+//
+//                        echo "Terraform format check..."
+//                        terraform fmt -check -recursive
+//
+//                        echo "Terraform validate..."
+//                        terraform validate
+//
+//                        echo "Terraform plan..."
+//                        terraform plan \
+//                          -out="${TF_PLAN_FILE}" \
+//                          -var="aws_region=${AWS_REGION}"
+//
+//                        echo "Terraform plan completed successfully"
+//                        ls -la
+//                    '''
+//                }
+//            }
+//        }
+//
+//
+//
+//        stage('Step 9 - Checkov Scan') {
+//            steps {
 //                sh '''
-//                    rm -rf "$BUILD_DIR"
-//                    mkdir -p "$BUILD_DIR"
+//                 echo "Starting Checkov scan..."
 //
-//                    echo "Building product-service..."
-//                    cd "$PRODUCT_SERVICE_DIR"
-//                    go build -o "../$BUILD_DIR/product-service" .
-//                    cd ..
+//                 echo "Checking Terraform directory..."
+//                 test -d "${TERRAFORM_DIR}"
+//                 ls -la "${TERRAFORM_DIR}"
 //
-//                    echo "Building order-service..."
-//                    cd "$ORDER_SERVICE_DIR"
-//                    go build -o "../$BUILD_DIR/order-service" .
-//                    cd ..
+//                 mkdir -p checkov-reports
 //
-//                    echo "Generated build artifacts:"
-//                    ls -lh "$BUILD_DIR"
-//                '''
+//                 echo "Running Checkov scan on Terraform code..."
+//
+//                 docker run --rm \
+//                  -v "$WORKSPACE:/workspace" \
+//                 bridgecrew/checkov:latest \
+//                  -d /workspace/${TERRAFORM_DIR} \
+//                  --framework terraform \
+//                  --soft-fail \
+//                  --output cli \
+//                  --output json \
+//                  --output-file-path console,/workspace/checkov-reports/checkov-report.json
+//
+//                echo "Checkov reports generated:"
+//                ls -la checkov-reports || true
+//
+//                echo "Checkov scan completed successfully"
+//            '''
+//          }
+//       }
+//        stage('Step 10 - Terraform Apply') {
+//            steps {
+//                input message: 'Do you want to apply Terraform changes?', ok: 'Apply Now'
+//
+//                withAWS(credentials: 'aws-creds', region: "${AWS_REGION}") {
+//                    sh '''
+//                echo "Starting Terraform apply..."
+//
+//                echo "Checking AWS identity..."
+//                aws sts get-caller-identity
+//
+//                echo "Moving to Terraform directory..."
+//                cd "${TERRAFORM_DIR}"
+//
+//                echo "Current Terraform directory:"
+//                pwd
+//                ls -la
+//
+//                echo "Checking Terraform plan file..."
+//                test -f "${TF_PLAN_FILE}"
+//
+//                echo "Applying Terraform plan..."
+//                terraform apply -auto-approve "${TF_PLAN_FILE}"
+//
+//                echo "Terraform apply completed successfully"
+//
+//                echo "Terraform outputs:"
+//                terraform output || true
+//            '''
+//                }
 //            }
 //        }
-//
-//        stage('Archive Build Artifacts') {
+//        stage('Step 11 - Ansible Bootstrap') {
 //            steps {
-//                echo 'Archiving build artifacts...'
+//                withAWS(credentials: 'aws-creds', region: "${AWS_REGION}") {
+//                    sh '''
+//                echo "Starting Ansible bootstrap..."
 //
-//                archiveArtifacts artifacts: 'build-artifacts/*', fingerprint: true
+//                echo "Checking AWS identity..."
+//                aws sts get-caller-identity
+//
+//                echo "Updating kubeconfig for EKS cluster..."
+//                aws eks update-kubeconfig \
+//                  --region "${AWS_REGION}" \
+//                  --name "${EKS_CLUSTER_NAME}"
+//
+//                echo "Checking kubectl access..."
+//                kubectl version --client
+//                kubectl get nodes
+//
+//                echo "Checking Ansible..."
+//                ansible --version
+//
+//                echo "Moving to Ansible directory..."
+//                cd "${ANSIBLE_DIR}"
+//
+//                echo "Current Ansible directory:"
+//                pwd
+//                ls -la
+//
+//                echo "Checking bootstrap playbook..."
+//                test -f ansible/playbooks/bootstrap-cluster.yml
+//
+//                echo "Running Ansible bootstrap playbook..."
+//                ansible-playbook \
+//                  -i localhost, \
+//                  -c local \
+//                  ansible/playbooks/bootstrap-cluster.yml \
+//                  -e env="${ENV_NAME}" \
+//                  -e aws_region="${AWS_REGION}" \
+//                  -e cluster_name="${EKS_CLUSTER_NAME}"
+//
+//                echo "Ansible bootstrap completed successfully"
+//            '''
+//                }
 //            }
 //        }
 //    }
 //
-//    post {
-//        success {
-//            echo 'Phase 1 completed successfully: GitHub checkout, Go test, Go build, and artifact archive are working.'
-//        }
-//
-//        failure {
-//            echo 'Phase 1 failed. Check the failed stage logs in Jenkins.'
-//        }
-//
-//        always {
-//            echo 'Cleaning Jenkins workspace...'
-//            cleanWs()
-//        }
-//    }
 //}
 
 
-///////////////////////////////////////////////////////////////////////
+/////////////////////////////////////////////////////////////
+
+/////////////////////////////////////////////////////////////
+
+////////////////////////////////////////////////////////////
+
+/////////////////////////////////////////////////////////////
+
+/////////////////////////////////////////////////////////////
+
+////////////////////////////////////////////////////////////
+
 
 pipeline {
     agent any
@@ -534,6 +872,7 @@ pipeline {
             }
         }
 
+        /*
         stage('Step 3 - SonarQube Scan') {
             steps {
                 withSonarQubeEnv('SonarQube-Server') {
@@ -668,80 +1007,82 @@ pipeline {
                 '''
             }
         }
+
         stage('Step 8A - Terraform Backend Bootstrap') {
             steps {
                 withAWS(credentials: 'aws-creds', region: "${AWS_REGION}") {
                     sh '''
-                echo "Starting Terraform backend bootstrap..."
+                        echo "Starting Terraform backend bootstrap..."
 
-                BACKEND_BUCKET="gocartops-dev-tfstate-${AWS_ACCOUNT_ID}-${AWS_REGION}"
-                LOCK_TABLE="gocartops-dev-tf-locks"
+                        BACKEND_BUCKET="gocartops-dev-tfstate-${AWS_ACCOUNT_ID}-${AWS_REGION}"
+                        LOCK_TABLE="gocartops-dev-tf-locks"
 
-                echo "Backend bucket: ${BACKEND_BUCKET}"
-                echo "Lock table: ${LOCK_TABLE}"
+                        echo "Backend bucket: ${BACKEND_BUCKET}"
+                        echo "Lock table: ${LOCK_TABLE}"
 
-                echo "Checking AWS identity..."
-                aws sts get-caller-identity
+                        echo "Checking AWS identity..."
+                        aws sts get-caller-identity
 
-                echo "Checking if S3 backend bucket exists..."
-                if aws s3api head-bucket --bucket "${BACKEND_BUCKET}" 2>/dev/null; then
-                  echo "S3 backend bucket already exists: ${BACKEND_BUCKET}"
-                else
-                  echo "Creating S3 backend bucket: ${BACKEND_BUCKET}"
+                        echo "Checking if S3 backend bucket exists..."
+                        if aws s3api head-bucket --bucket "${BACKEND_BUCKET}" 2>/dev/null; then
+                          echo "S3 backend bucket already exists: ${BACKEND_BUCKET}"
+                        else
+                          echo "Creating S3 backend bucket: ${BACKEND_BUCKET}"
 
-                  aws s3api create-bucket \
-                    --bucket "${BACKEND_BUCKET}" \
-                    --region "${AWS_REGION}" \
-                    --create-bucket-configuration LocationConstraint="${AWS_REGION}"
+                          aws s3api create-bucket \
+                            --bucket "${BACKEND_BUCKET}" \
+                            --region "${AWS_REGION}" \
+                            --create-bucket-configuration LocationConstraint="${AWS_REGION}"
 
-                  echo "Enabling versioning on backend bucket..."
-                  aws s3api put-bucket-versioning \
-                    --bucket "${BACKEND_BUCKET}" \
-                    --versioning-configuration Status=Enabled
+                          echo "Enabling versioning on backend bucket..."
+                          aws s3api put-bucket-versioning \
+                            --bucket "${BACKEND_BUCKET}" \
+                            --versioning-configuration Status=Enabled
 
-                  echo "Enabling default encryption on backend bucket..."
-                  aws s3api put-bucket-encryption \
-                    --bucket "${BACKEND_BUCKET}" \
-                    --server-side-encryption-configuration '{
-                      "Rules": [
-                        {
-                          "ApplyServerSideEncryptionByDefault": {
-                            "SSEAlgorithm": "AES256"
-                          }
-                        }
-                      ]
-                    }'
+                          echo "Enabling default encryption on backend bucket..."
+                          aws s3api put-bucket-encryption \
+                            --bucket "${BACKEND_BUCKET}" \
+                            --server-side-encryption-configuration '{
+                              "Rules": [
+                                {
+                                  "ApplyServerSideEncryptionByDefault": {
+                                    "SSEAlgorithm": "AES256"
+                                  }
+                                }
+                              ]
+                            }'
 
-                  echo "Blocking public access on backend bucket..."
-                  aws s3api put-public-access-block \
-                    --bucket "${BACKEND_BUCKET}" \
-                    --public-access-block-configuration BlockPublicAcls=true,IgnorePublicAcls=true,BlockPublicPolicy=true,RestrictPublicBuckets=true
-                fi
+                          echo "Blocking public access on backend bucket..."
+                          aws s3api put-public-access-block \
+                            --bucket "${BACKEND_BUCKET}" \
+                            --public-access-block-configuration BlockPublicAcls=true,IgnorePublicAcls=true,BlockPublicPolicy=true,RestrictPublicBuckets=true
+                        fi
 
-                echo "Checking if DynamoDB lock table exists..."
-                if aws dynamodb describe-table --table-name "${LOCK_TABLE}" --region "${AWS_REGION}" >/dev/null 2>&1; then
-                  echo "DynamoDB lock table already exists: ${LOCK_TABLE}"
-                else
-                  echo "Creating DynamoDB lock table: ${LOCK_TABLE}"
+                        echo "Checking if DynamoDB lock table exists..."
+                        if aws dynamodb describe-table --table-name "${LOCK_TABLE}" --region "${AWS_REGION}" >/dev/null 2>&1; then
+                          echo "DynamoDB lock table already exists: ${LOCK_TABLE}"
+                        else
+                          echo "Creating DynamoDB lock table: ${LOCK_TABLE}"
 
-                  aws dynamodb create-table \
-                    --table-name "${LOCK_TABLE}" \
-                    --attribute-definitions AttributeName=LockID,AttributeType=S \
-                    --key-schema AttributeName=LockID,KeyType=HASH \
-                    --billing-mode PAY_PER_REQUEST \
-                    --region "${AWS_REGION}"
+                          aws dynamodb create-table \
+                            --table-name "${LOCK_TABLE}" \
+                            --attribute-definitions AttributeName=LockID,AttributeType=S \
+                            --key-schema AttributeName=LockID,KeyType=HASH \
+                            --billing-mode PAY_PER_REQUEST \
+                            --region "${AWS_REGION}"
 
-                  echo "Waiting for DynamoDB lock table to become active..."
-                  aws dynamodb wait table-exists \
-                    --table-name "${LOCK_TABLE}" \
-                    --region "${AWS_REGION}"
-                fi
+                          echo "Waiting for DynamoDB lock table to become active..."
+                          aws dynamodb wait table-exists \
+                            --table-name "${LOCK_TABLE}" \
+                            --region "${AWS_REGION}"
+                        fi
 
-                echo "Terraform backend bootstrap completed successfully"
-            '''
+                        echo "Terraform backend bootstrap completed successfully"
+                    '''
                 }
             }
         }
+
         stage('Step 7 - Docker Push to ECR') {
             steps {
                 withAWS(credentials: 'aws-creds', region: "${AWS_REGION}") {
@@ -763,16 +1104,10 @@ pipeline {
                         aws ecr describe-repositories \
                           --repository-names ${PRODUCT_ECR_REPO} \
                           --region ${AWS_REGION} >/dev/null 2>&1 || \
-//                        aws ecr create-repository \
-//                          --repository-name ${PRODUCT_ECR_REPO} \
-//                          --region ${AWS_REGION}
 
                         aws ecr describe-repositories \
                           --repository-names ${ORDER_ECR_REPO} \
                           --region ${AWS_REGION} >/dev/null 2>&1 || \
-//                        aws ecr create-repository \
-//                          --repository-name ${ORDER_ECR_REPO} \
-//                          --region ${AWS_REGION}
 
                         echo "Tagging product-service image for ECR..."
                         docker tag ${PRODUCT_IMAGE}:${IMAGE_TAG} ${ECR_REGISTRY}/${PRODUCT_ECR_REPO}:${IMAGE_TAG}
@@ -804,38 +1139,38 @@ pipeline {
             steps {
                 withAWS(credentials: 'aws-creds', region: "${AWS_REGION}") {
                     sh '''
-                echo "Starting ECR import into Terraform state..."
+                        echo "Starting ECR import into Terraform state..."
 
-                echo "Checking AWS identity..."
-                aws sts get-caller-identity
+                        echo "Checking AWS identity..."
+                        aws sts get-caller-identity
 
-                cd "${TERRAFORM_DIR}"
+                        cd "${TERRAFORM_DIR}"
 
-                echo "Initializing Terraform..."
-                terraform init -reconfigure
+                        echo "Initializing Terraform..."
+                        terraform init -reconfigure
 
-                echo "Checking current Terraform state..."
-                terraform state list || true
+                        echo "Checking current Terraform state..."
+                        terraform state list || true
 
-                echo "Importing product-service ECR repo if not already imported..."
-                if terraform state list | grep 'module.ecr.aws_ecr_repository.this\\["gocartops-product-service"\\]'; then
-                  echo "Product ECR repo already exists in Terraform state"
-                else
-                  terraform import 'module.ecr.aws_ecr_repository.this["gocartops-product-service"]' gocartops-product-service
-                fi
+                        echo "Importing product-service ECR repo if not already imported..."
+                        if terraform state list | grep 'module.ecr.aws_ecr_repository.this\\["gocartops-product-service"\\]'; then
+                          echo "Product ECR repo already exists in Terraform state"
+                        else
+                          terraform import 'module.ecr.aws_ecr_repository.this["gocartops-product-service"]' gocartops-product-service
+                        fi
 
-                echo "Importing order-service ECR repo if not already imported..."
-                if terraform state list | grep 'module.ecr.aws_ecr_repository.this\\["gocartops-order-service"\\]'; then
-                  echo "Order ECR repo already exists in Terraform state"
-                else
-                  terraform import 'module.ecr.aws_ecr_repository.this["gocartops-order-service"]' gocartops-order-service
-                fi
+                        echo "Importing order-service ECR repo if not already imported..."
+                        if terraform state list | grep 'module.ecr.aws_ecr_repository.this\\["gocartops-order-service"\\]'; then
+                          echo "Order ECR repo already exists in Terraform state"
+                        else
+                          terraform import 'module.ecr.aws_ecr_repository.this["gocartops-order-service"]' gocartops-order-service
+                        fi
 
-                echo "ECR import completed successfully"
+                        echo "ECR import completed successfully"
 
-                echo "Updated Terraform state:"
-                terraform state list | grep ecr || true
-            '''
+                        echo "Updated Terraform state:"
+                        terraform state list | grep ecr || true
+                    '''
                 }
             }
         }
@@ -871,7 +1206,7 @@ pipeline {
                         echo "Terraform plan..."
                         terraform plan \
                           -out="${TF_PLAN_FILE}" \
-                          -var="aws_region=${AWS_REGION}" 
+                          -var="aws_region=${AWS_REGION}"
 
                         echo "Terraform plan completed successfully"
                         ls -la
@@ -880,115 +1215,115 @@ pipeline {
             }
         }
 
-
-
         stage('Step 9 - Checkov Scan') {
             steps {
                 sh '''
-                 echo "Starting Checkov scan..."
+                    echo "Starting Checkov scan..."
 
-                 echo "Checking Terraform directory..."
-                 test -d "${TERRAFORM_DIR}"
-                 ls -la "${TERRAFORM_DIR}"
+                    echo "Checking Terraform directory..."
+                    test -d "${TERRAFORM_DIR}"
+                    ls -la "${TERRAFORM_DIR}"
 
-                 mkdir -p checkov-reports
+                    mkdir -p checkov-reports
 
-                 echo "Running Checkov scan on Terraform code..."
+                    echo "Running Checkov scan on Terraform code..."
 
-                 docker run --rm \
-                  -v "$WORKSPACE:/workspace" \
-                 bridgecrew/checkov:latest \
-                  -d /workspace/${TERRAFORM_DIR} \
-                  --framework terraform \
-                  --soft-fail \
-                  --output cli \
-                  --output json \
-                  --output-file-path console,/workspace/checkov-reports/checkov-report.json
+                    docker run --rm \
+                      -v "$WORKSPACE:/workspace" \
+                      bridgecrew/checkov:latest \
+                      -d /workspace/${TERRAFORM_DIR} \
+                      --framework terraform \
+                      --soft-fail \
+                      --output cli \
+                      --output json \
+                      --output-file-path console,/workspace/checkov-reports/checkov-report.json
 
-                echo "Checkov reports generated:"
-                ls -la checkov-reports || true
+                    echo "Checkov reports generated:"
+                    ls -la checkov-reports || true
 
-                echo "Checkov scan completed successfully"
-            '''
-          }
-       }
+                    echo "Checkov scan completed successfully"
+                '''
+            }
+        }
+
         stage('Step 10 - Terraform Apply') {
             steps {
                 input message: 'Do you want to apply Terraform changes?', ok: 'Apply Now'
 
                 withAWS(credentials: 'aws-creds', region: "${AWS_REGION}") {
                     sh '''
-                echo "Starting Terraform apply..."
+                        echo "Starting Terraform apply..."
 
-                echo "Checking AWS identity..."
-                aws sts get-caller-identity
+                        echo "Checking AWS identity..."
+                        aws sts get-caller-identity
 
-                echo "Moving to Terraform directory..."
-                cd "${TERRAFORM_DIR}"
+                        echo "Moving to Terraform directory..."
+                        cd "${TERRAFORM_DIR}"
 
-                echo "Current Terraform directory:"
-                pwd
-                ls -la
+                        echo "Current Terraform directory:"
+                        pwd
+                        ls -la
 
-                echo "Checking Terraform plan file..."
-                test -f "${TF_PLAN_FILE}"
+                        echo "Checking Terraform plan file..."
+                        test -f "${TF_PLAN_FILE}"
 
-                echo "Applying Terraform plan..."
-                terraform apply -auto-approve "${TF_PLAN_FILE}"
+                        echo "Applying Terraform plan..."
+                        terraform apply -auto-approve "${TF_PLAN_FILE}"
 
-                echo "Terraform apply completed successfully"
+                        echo "Terraform apply completed successfully"
 
-                echo "Terraform outputs:"
-                terraform output || true
-            '''
+                        echo "Terraform outputs:"
+                        terraform output || true
+                    '''
                 }
             }
         }
+        */
+
         stage('Step 11 - Ansible Bootstrap') {
             steps {
                 withAWS(credentials: 'aws-creds', region: "${AWS_REGION}") {
                     sh '''
-                echo "Starting Ansible bootstrap..."
+                        echo "Starting Ansible bootstrap..."
 
-                echo "Checking AWS identity..."
-                aws sts get-caller-identity
+                        echo "Checking AWS identity..."
+                        aws sts get-caller-identity
 
-                echo "Updating kubeconfig for EKS cluster..."
-                aws eks update-kubeconfig \
-                  --region "${AWS_REGION}" \
-                  --name "${EKS_CLUSTER_NAME}"
+                        echo "Updating kubeconfig for EKS cluster..."
+                        aws eks update-kubeconfig \
+                          --region "${AWS_REGION}" \
+                          --name "${EKS_CLUSTER_NAME}"
 
-                echo "Checking kubectl access..."
-                kubectl version --client
-                kubectl get nodes
+                        echo "Checking kubectl access..."
+                        kubectl version --client
+                        kubectl get nodes
 
-                echo "Checking Ansible..."
-                ansible --version
+                        echo "Checking Ansible..."
+                        ansible --version
 
-                echo "Moving to Ansible directory..."
-                cd "${ANSIBLE_DIR}"
+                        echo "Moving to Ansible directory..."
+                        cd "${ANSIBLE_DIR}"
 
-                echo "Current Ansible directory:"
-                pwd
-                ls -la
+                        echo "Current Ansible directory:"
+                        pwd
+                        ls -la
 
-                echo "Checking bootstrap playbook..."
-                test -f ansible/playbooks/bootstrap-cluster.yml
+                        echo "Checking bootstrap playbook..."
+                        test -f playbooks/bootstrap-cluster.yml
 
-                echo "Running Ansible bootstrap playbook..."
-                ansible-playbook \
-                  -i localhost, \
-                  -c local \
-                  ansible/playbooks/bootstrap-cluster.yml \
-                  -e env="${ENV_NAME}" \
-                  -e aws_region="${AWS_REGION}" \
-                  -e cluster_name="${EKS_CLUSTER_NAME}"
+                        echo "Running Ansible bootstrap playbook..."
+                        ansible-playbook \
+                          -i localhost, \
+                          -c local \
+                          playbooks/bootstrap-cluster.yml \
+                          -e env="${ENV_NAME}" \
+                          -e aws_region="${AWS_REGION}" \
+                          -e cluster_name="${EKS_CLUSTER_NAME}"
 
-                echo "Ansible bootstrap completed successfully"
-            '''
+                        echo "Ansible bootstrap completed successfully"
+                    '''
                 }
             }
         }
     }
-
 }
