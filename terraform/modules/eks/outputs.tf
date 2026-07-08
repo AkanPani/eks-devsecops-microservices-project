@@ -40,3 +40,4 @@ output "oidc_provider_arn" {
   description = "EKS OIDC provider ARN"
   value       = aws_iam_openid_connect_provider.eks.arn
 }
+

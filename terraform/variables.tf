@@ -237,3 +237,28 @@ variable "instance_type" {
 variable "key_name" {
   description = "Existing AWS Key Pair"
 }
+
+variable "hosted_zone_name" {
+  description = "Route53 hosted zone name"
+  type        = string
+}
+
+variable "domain_name" {
+  description = "Domain name for ACM certificate"
+  type        = string
+}
+
+variable "tags" {
+  description = "Common tags"
+  type        = map(string)
+  default = {
+    Project   = "gocartops"
+    ManagedBy = "terraform"
+  }
+}
+
+variable "alias_name" {
+  description = "KMS alias name. Must start with alias/"
+  type        = string
+  default     = null
+}

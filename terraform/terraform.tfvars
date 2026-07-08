@@ -53,3 +53,14 @@ order_service_account_name   = "order-service-sa"
 
 #EC2
 key_name = "test_new"
+
+alias_name       = "alias/gocartops-dev-kms"
+hosted_zone_name = "tbdpro.in"
+domain_name      = "dev.tbdpro.in"
+
+tags = {
+  Project     = "gocartops"
+  Environment = "dev"
+  ManagedBy   = "terraform"
+  Owner       = "Akankshya"
+}

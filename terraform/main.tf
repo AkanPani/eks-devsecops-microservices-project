@@ -34,6 +34,7 @@ module "ecr" {
 
   repository_names     = var.ecr_repository_names
   image_tag_mutability = var.ecr_image_tag_mutability
+  kms_key_arn          = module.project_kms.key_arn
 
   tags = local.common_tags
 }
@@ -50,6 +51,7 @@ module "eks" {
   cluster_endpoint_public     = var.cluster_endpoint_public
   cluster_endpoint_private    = var.cluster_endpoint_private
   cluster_public_access_cidrs = var.cluster_public_access_cidrs
+  kms_key_arn                 = module.project_kms.key_arn
 
   node_group_name     = var.node_group_name
   node_instance_types = var.node_instance_types
@@ -83,6 +85,7 @@ module "rds" {
   vpc_id                     = module.vpc.vpc_id
   private_subnet_ids         = module.vpc.private_subnet_ids
   allowed_security_group_ids = [module.eks.node_security_group_id]
+  kms_key_arn                = module.project_kms.key_arn
 
   db_name              = var.db_name
   db_username          = var.db_username
@@ -115,102 +118,47 @@ module "iam" {
   tags = local.common_tags
 }
 
-#########################################################
-#JENKINS#
-#########################################################
-# resource "aws_vpc" "jenkins_vpc" {
-#   cidr_block           = var.vpc_cidr
-#   enable_dns_support   = true
-#   enable_dns_hostnames = true
-#
-#   tags = {
-#     Name = "jenkins-vpc"
-#   }
-# }
-#
-# resource "aws_subnet" "public_subnet" {
-#   vpc_id                  = aws_vpc.jenkins_vpc.id
-#   cidr_block              = var.public_subnet_cidr
-#   availability_zone       = "ap-south-1a"
-#   map_public_ip_on_launch = true
-#
-#   tags = {
-#     Name = "jenkins-public-subnet"
-#   }
-# }
-#
-# resource "aws_internet_gateway" "igw" {
-#   vpc_id = aws_vpc.jenkins_vpc.id
-#
-#   tags = {
-#     Name = "jenkins-igw"
-#   }
-# }
-#
-# resource "aws_route_table" "public_rt" {
-#   vpc_id = aws_vpc.jenkins_vpc.id
-#
-#   route {
-#     cidr_block = "0.0.0.0/0"
-#     gateway_id = aws_internet_gateway.igw.id
-#   }
-# }
-#
-# resource "aws_route_table_association" "public_assoc" {
-#   subnet_id      = aws_subnet.public_subnet.id
-#   route_table_id = aws_route_table.public_rt.id
-# }
-#
-# resource "aws_security_group" "jenkins_sg" {
-#   name   = "jenkins-sg"
-#   vpc_id = aws_vpc.jenkins_vpc.id
-#
-#   ingress {
-#     description = "SSH"
-#     from_port   = 22
-#     to_port     = 22
-#     protocol    = "tcp"
-#     cidr_blocks = ["49.207.201.244/32"]
-#   }
-#
-#   ingress {
-#     description = "Jenkins"
-#     from_port   = 8080
-#     to_port     = 8080
-#     protocol    = "tcp"
-#     cidr_blocks = ["49.207.201.244/32"]
-#   }
-#
-#   egress {
-#     from_port   = 0
-#     to_port     = 0
-#     protocol    = "-1"
-#     cidr_blocks = ["0.0.0.0/0"]
-#   }
-# }
-#
-# data "aws_ami" "amazon_linux" {
-#   most_recent = true
-#
-#   owners = ["amazon"]
-#
-#   filter {
-#     name   = "name"
-#     values = ["al2023-ami-*-x86_64"]
-#   }
-# }
-#
-# resource "aws_instance" "jenkins" {
-#
-#   ami                    = data.aws_ami.amazon_linux.id
-#   instance_type          = var.instance_type
-#   subnet_id              = aws_subnet.public_subnet.id
-#   key_name               = var.key_name
-#   vpc_security_group_ids = [aws_security_group.jenkins_sg.id]
-#
-#   tags = {
-#     Name        = "jenkins-server"
-#     Environment = "dev"
-#   }
-# }
+module "project_kms" {
+  source = "./modules/kms"
 
+  project_name = var.project_name
+  environment  = var.environment
+  alias_name   = var.alias_name
+
+  tags = local.common_tags
+}
+
+module "project_acm" {
+  source = "./modules/acm"
+
+  hosted_zone_name = var.hosted_zone_name
+  domain_name      = var.domain_name
+
+  subject_alternative_names = [
+    "*.${var.domain_name}"
+  ]
+
+  tags = var.tags
+}
+
+
+resource "aws_s3_bucket" "this" {
+  bucket = "${var.project_name}-${var.environment}-bucket"
+
+  tags = merge(var.tags, {
+    Name = "${var.project_name}-${var.environment}-bucket"
+  })
+}
+
+resource "aws_s3_bucket_server_side_encryption_configuration" "this" {
+  bucket = aws_s3_bucket.this.id
+
+  rule {
+    apply_server_side_encryption_by_default {
+      kms_master_key_id = module.project_kms.key_arn
+      sse_algorithm     = "aws:kms"
+    }
+
+    bucket_key_enabled = true
+  }
+}

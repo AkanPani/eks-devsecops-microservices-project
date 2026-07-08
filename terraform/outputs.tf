@@ -83,10 +83,19 @@ output "product_service_irsa_role_arn" {
   value       = module.iam.product_service_irsa_role_arn
 }
 
-# output "jenkins_public_ip" {
-#   value = aws_instance.jenkins.public_ip
-# }
-#
-# output "jenkins_public_dns" {
-#   value = aws_instance.jenkins.public_dns
-# }
+output "kms_key_arn" {
+  value = module.project_kms.key_arn
+}
+
+output "kms_alias_name" {
+  value = module.project_kms.alias_name
+}
+
+output "acm_certificate_arn" {
+  value = module.project_acm.certificate_arn
+}
+
+output "route53_name_servers" {
+  description = "Name servers for the Route 53 hosted zone"
+  value       = module.project_acm.name_servers
+}

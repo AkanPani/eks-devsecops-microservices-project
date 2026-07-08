@@ -53,6 +53,7 @@ resource "aws_db_instance" "this" {
   max_allocated_storage = var.db_allocated_storage * 2
   storage_type          = "gp3"
   storage_encrypted     = true
+  kms_key_id            = var.kms_key_arn
 
   db_name  = var.db_name
   username = var.db_username
@@ -80,6 +81,7 @@ resource "aws_secretsmanager_secret" "db" {
   name                    = "${var.project_name}/${var.environment}/rds/postgres"
   description             = "RDS PostgreSQL credentials for ${var.project_name} ${var.environment}"
   recovery_window_in_days = 0
+  kms_key_id              = var.kms_key_arn
 
   tags = merge(var.tags, {
     Name = "${var.project_name}-${var.environment}-rds-secret"
